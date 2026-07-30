@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Unified Inbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #fafafa;
+    --bg-list: #ffffff;
+    --ink: #16161a;
+    --ink-2: #5c5f66;
+    --ink-3: #9498a1;
+    --line: #ececec;
+    --line-2: #e3e3e3;
+    --accent: #5b53e0;         /* refined indigo */
+    --accent-soft: #efeefc;
+    --sel: #f5f4ff;
+    --unread: #5b53e0;
+    --radius: 10px;
+    --font: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font); font-size: 13.5px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased; letter-spacing: -0.006em;
+  }
+  .mono { font-family: var(--mono); font-size: 11px; letter-spacing: 0; }
+  button { font-family: inherit; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    height: 52px; display: flex; align-items: center; gap: 14px;
+    padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .wordmark { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; letter-spacing: -0.02em; white-space: nowrap; }
+  .modeseg { display: flex; background: var(--bg-soft); border: 1px solid var(--line-2); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg { border: none; background: none; color: var(--ink-2); font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
+  .seg.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .wm-dots { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+  .wm-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+  .search {
+    flex: 1; max-width: 520px; display: flex; align-items: center; gap: 8px;
+    background: var(--bg-soft); border: 1px solid var(--line-2); border-radius: 9px;
+    padding: 7px 11px; color: var(--ink-3); transition: border-color .12s, background .12s;
+  }
+  .search:focus-within { border-color: var(--accent); background: #fff; }
+  .search input { border: none; outline: none; background: none; width: 100%; font-family: inherit; font-size: 13px; color: var(--ink); }
+  .search kbd { font-family: var(--mono); font-size: 10px; color: var(--ink-3); border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 5px; background: #fff; }
+  .spacer { flex: 1; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+  .dotpulse { width: 7px; height: 7px; border-radius: 50%; background: #cfcfcf; }
+  .dotpulse.on { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .icon-btn { border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); border-radius: 8px; height: 30px; padding: 0 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .icon-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+
+  /* ---------- Filter pills ---------- */
+  .pills { display: flex; align-items: center; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--bg); }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .pill:hover { border-color: var(--ink-3); }
+  .pill.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pill .n { font-family: var(--mono); font-size: 10px; opacity: .8; }
+  .pill.sep { border: none; background: none; color: var(--line-2); cursor: default; padding: 0 2px; }
+
+  /* ---------- Main split ---------- */
+  .main { display: grid; grid-template-columns: minmax(340px, 460px) 1fr; height: calc(100vh - 52px - 47px); }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } .reader.empty { display: none; } }
+
+  .list { overflow-y: auto; border-right: 1px solid var(--line); background: var(--bg-list); }
+  .row { display: grid; grid-template-columns: 3px 1fr auto; gap: 11px; padding: 11px 15px 11px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .row:hover { background: var(--bg-soft); }
+  .row.sel { background: var(--sel); }
+  .row.sel .bar { background: var(--accent); }
+  .bar { border-radius: 0 2px 2px 0; background: transparent; }
+  .row .c { min-width: 0; }
+  .row .top { display: flex; align-items: center; gap: 7px; }
+  .srcdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .who { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.read .who { font-weight: 500; color: var(--ink-2); }
+  .tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .02em; padding: 1px 5px; border-radius: 4px; flex: none; }
+  .subj { color: var(--ink); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .row.read .subj { font-weight: 400; color: var(--ink-2); }
+  .snip { color: var(--ink-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  .row .meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding: 2px 15px 0 0; }
+  .row .time { color: var(--ink-3); }
+  .udot { width: 7px; height: 7px; border-radius: 50%; background: var(--unread); }
+  .row.read .udot { background: transparent; }
+  .row.deep { background: linear-gradient(90deg, #faf9ff, #fff); }
+  .row.deep.sel { background: var(--sel); }
+  .deep-divider { padding: 10px 15px 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: var(--bg-soft); border-bottom: 1px solid var(--line); position: sticky; top: 0; }
+  .ext-tag { font-size: 9.5px; color: var(--ink-3); border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 5px; }
+  .deep-btn { margin: 10px 15px; padding: 11px 14px; text-align: center; border: 1px dashed var(--line-2); border-radius: 10px; color: var(--accent); font-size: 13px; cursor: pointer; font-weight: 500; }
+  .deep-btn:hover { border-color: var(--accent); background: var(--sel); }
+  .deep-btn.loading-inline { color: var(--ink-3); cursor: default; border-style: solid; }
+
+  /* ---------- Calendar agenda ---------- */
+  .daygroup { padding: 0; }
+  .dayhead { position: sticky; top: 0; background: var(--bg-list); padding: 12px 15px 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line); z-index: 1; }
+  .dayhead.today { color: var(--accent); }
+  .ev { display: grid; grid-template-columns: 3px 54px 1fr; gap: 11px; padding: 10px 15px 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; align-items: start; }
+  .ev:hover { background: var(--bg-soft); }
+  .ev.sel { background: var(--sel); }
+  .ev.sel .ebar { background: var(--accent); }
+  .ebar { border-radius: 0 2px 2px 0; background: transparent; align-self: stretch; }
+  .etime { font-family: var(--mono); font-size: 11px; color: var(--ink-2); padding-top: 2px; text-align: right; }
+  .etime .allday { color: var(--ink-3); }
+  .etitle { font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .emeta { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+  .ecal { display: inline-flex; align-items: center; gap: 5px; }
+  .ecaldot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  /* ---------- Calendar grid (week / 3-day) ---------- */
+  .main.cal { grid-template-columns: 1fr 360px; }   /* wide grid + detail panel */
+  .calv { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .cal-tip { position: fixed; z-index: 60; background: #16161a; color: #fff; padding: 7px 10px; border-radius: 8px; font-size: 12px; max-width: 260px; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.25); display: none; line-height: 1.35; }
+  .cal-tip .tt { font-weight: 600; margin-bottom: 2px; }
+  .cal-tip .ts { opacity: .8; font-size: 11px; }
+  .cal-event.sel { outline: 2px solid #16161a; outline-offset: -1px; }
+  .cal-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex: none; }
+  .cal-nav { display: flex; align-items: center; gap: 4px; }
+  .cal-btn { border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); border-radius: 8px; height: 30px; min-width: 30px; padding: 0 10px; cursor: pointer; font-size: 12.5px; }
+  .cal-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+  .cal-btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .cal-range { font-weight: 600; font-size: 14px; margin-left: 6px; }
+  .cal-legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--ink-2); max-width: 46%; overflow: hidden; }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .cal-legend i { width: 9px; height: 9px; border-radius: 3px; }
+  .cal-head { display: grid; border-bottom: 1px solid var(--line); flex: none; }
+  .cal-corner { border-right: 1px solid var(--line); }
+  .cal-dh { text-align: center; padding: 7px 4px; border-left: 1px solid var(--line-soft); }
+  .cal-dh .dow { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
+  .cal-dh .dnum { font-size: 19px; font-weight: 600; margin-top: 2px; line-height: 1; }
+  .cal-dh.today .dnum { color: #fff; background: var(--accent); border-radius: 999px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+  .cal-dh.today .dow { color: var(--accent); }
+  .cal-allday { display: grid; border-bottom: 1px solid var(--line); max-height: 108px; overflow-y: auto; flex: none; padding: 3px 0; gap: 2px 0; align-content: start; }
+  .cal-allday-label { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: 10px; color: var(--ink-3); }
+  .cal-abar { margin: 0 3px; border-radius: 4px; padding: 2px 8px; font-size: 11px; color: #fff; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 16px; }
+  .cal-abar:hover { filter: brightness(1.08); }
+  .cal-chip { border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #fff; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-body { flex: 1; overflow-y: auto; }
+  .cal-grid { display: grid; position: relative; }
+  .cal-axis { position: relative; }
+  .cal-axis .hr { position: absolute; right: 6px; font-size: 10px; color: var(--ink-3); transform: translateY(-6px); }
+  .cal-col { position: relative; border-left: 1px solid var(--line-soft); }
+  .cal-event { position: absolute; border-radius: 5px; padding: 2px 6px; font-size: 11px; color: #fff; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.12); line-height: 1.25; }
+  .cal-event .ce-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-event .ce-time { opacity: .85; font-size: 10px; }
+  .cal-now { position: absolute; height: 0; border-top: 2px solid #e0533d; z-index: 5; pointer-events: none; }
+  .cal-now::before { content: ""; position: absolute; left: -4px; top: -4px; width: 7px; height: 7px; border-radius: 50%; background: #e0533d; }
+
+  /* ---------- Luma SF cards ---------- */
+  .luma-wrap { overflow-y: auto; padding: 16px; }
+  .luma-day { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); padding: 14px 4px 8px; }
+  .luma-day.today { color: var(--accent); }
+  .luma-card { display: grid; grid-template-columns: 84px 1fr; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; cursor: pointer; background: #fff; text-decoration: none; color: inherit; }
+  .luma-card:hover { border-color: var(--ink-3); box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .luma-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .luma-cover { width: 84px; height: 84px; border-radius: 8px; object-fit: cover; background: var(--bg-soft); flex: none; }
+  .luma-body { min-width: 0; align-self: center; }
+  .luma-time { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 500; }
+  .luma-name { font-weight: 600; font-size: 14px; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .luma-loc { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 5px; }
+  .luma-pills { display: flex; gap: 6px; padding: 10px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
+  .luma-pill { border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; }
+  .luma-pill:hover { border-color: var(--ink-3); }
+  .luma-pill.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .luma-pill .n { font-family: var(--mono); font-size: 10px; opacity: .8; }
+  .luma-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px; margin-left: 7px; }
+  .luma-detail { overflow-y: auto; height: 100%; }
+  .luma-detail-cover { width: 100%; max-height: 240px; object-fit: cover; display: block; background: var(--bg-soft); }
+  .luma-detail-body { padding: 20px 24px 30px; }
+  .luma-detail-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #e0533d; margin-bottom: 10px; }
+  .luma-detail-row { color: var(--ink-2); font-size: 13px; margin: 6px 0; }
+  .luma-open { display: inline-block; margin: 14px 0 4px; background: #e0533d; color: #fff; text-decoration: none; padding: 9px 15px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+  .luma-open:hover { filter: brightness(1.05); }
+  .luma-desc { margin-top: 14px; line-height: 1.55; color: #24242a; font-size: 13px; }
+  .luma-desc .ldim { color: var(--ink-3); }
+  .luma-prose { margin-top: 14px; line-height: 1.6; color: #24242a; font-size: 13.5px; }
+  .luma-prose h3, .luma-prose h4, .luma-prose h5 { margin: 16px 0 6px; font-weight: 700; line-height: 1.3; }
+  .luma-prose h3 { font-size: 16px; } .luma-prose h4 { font-size: 14px; } .luma-prose h5 { font-size: 13px; }
+  .luma-prose p { margin: 8px 0; }
+  .luma-prose ul, .luma-prose ol { margin: 8px 0; padding-left: 22px; }
+  .luma-prose li { margin: 3px 0; }
+  .luma-prose a { color: #e0533d; text-decoration: underline; }
+  .luma-prose blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid var(--line-2); color: var(--ink-2); }
+  .luma-prose img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+  .luma-prose hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+
+  /* ---------- Tasks (Obsidian vault) ---------- */
+  .task-group { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); padding: 14px 15px 6px; }
+  .task-row { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 9px 15px; border-bottom: 1px solid var(--line-soft); cursor: pointer; align-items: start; }
+  .task-row:hover { background: var(--bg-soft); }
+  .task-row.sel { background: var(--sel); }
+  .task-box { width: 15px; height: 15px; border: 1.5px solid var(--ink-3); border-radius: 4px; margin-top: 1px; }
+  .task-text { color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+  .task-meta { display: flex; gap: 8px; margin-top: 4px; }
+  .task-due { font-size: 11px; color: var(--ink-3); }
+  .task-due.overdue { color: #e0533d; font-weight: 600; }
+  .task-tag { font-size: 11px; color: var(--accent); }
+  /* Obsidian-style graph in the Tasks right panel */
+  .graph-wrap { position: relative; height: 100%; width: 100%; background: #0f1216; overflow: hidden; }
+  #graphCanvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  #graphCanvas:active { cursor: grabbing; }
+  .graph-head { position: absolute; top: 12px; left: 14px; z-index: 2; color: #e9e7e1; font-size: 12px; opacity: .85; }
+  .graph-head b { font-weight: 600; }
+  .graph-rebuild { margin-left: 8px; color: #9aa5b1; cursor: pointer; text-decoration: none; border-bottom: 1px dotted #4a5568; }
+  .graph-rebuild:hover { color: #e9e7e1; }
+  .graph-rebuild.busy { color: #f2b45f; cursor: default; border-bottom-color: transparent; opacity: .8; }
+  .graph-hint { display: block; margin-top: 3px; color: #6b7688; font-size: 10.5px; letter-spacing: .01em; }
+  .graph-tip { position: absolute; z-index: 3; background: #1b212a; color: #e9e7e1; border: 1px solid #2b333f; border-radius: 7px; padding: 5px 9px; font-size: 12px; pointer-events: none; display: none; max-width: 260px; }
+  .graph-building { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9aa5b1; font-size: 13px; }
+
+  /* ---------- Ask (chat) ---------- */
+  .chat { display: flex; flex-direction: column; height: 100%; }
+  .chat-msgs { flex: 1; overflow-y: auto; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px; }
+  .chat-empty { margin: auto; text-align: center; color: var(--ink-3); max-width: 380px; }
+  .chat-b { max-width: 82%; padding: 11px 15px; border-radius: 15px; line-height: 1.5; white-space: pre-wrap; font-size: 13.5px; }
+  .chat-b.user { align-self: flex-end; background: var(--accent); color: #fff; }
+  .chat-b.assistant { align-self: flex-start; background: var(--bg-soft); border: 1px solid var(--line); color: var(--ink); }
+  .chat-b.thinking { color: var(--ink-3); font-style: italic; }
+  .chat-input-row { border-top: 1px solid var(--line); padding: 14px 20px; display: flex; gap: 10px; align-items: flex-end; background: var(--bg); }
+  .chat-input-row textarea { flex: 1; resize: none; border: 1px solid var(--line-2); border-radius: 11px; padding: 11px 14px; font-family: inherit; font-size: 13.5px; outline: none; max-height: 140px; line-height: 1.4; }
+  .chat-input-row textarea:focus { border-color: var(--accent); }
+  .chat-send { border: none; background: var(--accent); color: #fff; border-radius: 10px; padding: 0 16px; height: 40px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .chat-send:disabled { opacity: .5; cursor: default; }
+  .suggest { padding: 16px; }
+  .suggest-h { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); padding: 6px 4px 10px; }
+  .suggest-item { padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 9px; cursor: pointer; font-size: 13px; color: var(--ink); }
+  .suggest-item:hover { border-color: var(--accent); background: var(--sel); }
+
+  /* ---------- Floating Ask agent ---------- */
+  .ask-fab { position: fixed; right: 22px; bottom: 22px; z-index: 40; display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 12px 18px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(91,83,224,.4); }
+  .ask-fab:hover { filter: brightness(1.06); }
+  .ask-fab.hidden { display: none; }
+  .ask-float { position: fixed; right: 22px; bottom: 22px; z-index: 41; width: 400px; max-width: calc(100vw - 32px); height: 600px; max-height: calc(100vh - 90px); background: #fff; border: 1px solid var(--line-2); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.25); display: none; flex-direction: column; overflow: hidden; }
+  .ask-float.on { display: flex; }
+  .ask-float-head { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+  .ask-float-title { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .ask-dot { width: 8px; height: 8px; border-radius: 50%; background: #12a150; box-shadow: 0 0 0 3px #12a15022; }
+  .ask-float-close { margin-left: auto; border: none; background: none; font-size: 22px; line-height: 1; color: var(--ink-3); cursor: pointer; padding: 0 4px; }
+  .ask-float-close:hover { color: var(--ink); }
+  .ask-float .chat-empty { font-size: 13px; }
+  .ask-suggest { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+  .ask-sug { text-align: left; border: 1px solid var(--line-2); background: #fff; border-radius: 9px; padding: 9px 11px; font-size: 12.5px; color: var(--ink); cursor: pointer; font-family: inherit; }
+  .ask-sug:hover { border-color: var(--accent); background: var(--sel); }
+
+  /* ---------- Reader ---------- */
+  .reader { overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; }
+  .reader.empty { align-items: center; justify-content: center; color: var(--ink-3); }
+  .empty-hint { text-align: center; }
+  .empty-hint .k { font-family: var(--mono); font-size: 11px; background: var(--bg-soft); border: 1px solid var(--line-2); border-radius: 5px; padding: 2px 7px; }
+  .rd-head { padding: 22px 28px 16px; border-bottom: 1px solid var(--line); }
+  .rd-src { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-2); margin-bottom: 12px; }
+  .rd-subj { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 14px; line-height: 1.25; }
+  .rd-from { display: flex; align-items: center; gap: 11px; }
+  .rd-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; flex: none; }
+  .rd-name { font-weight: 600; }
+  .rd-addr { color: var(--ink-3); font-size: 12px; }
+  .rd-actions { margin-left: auto; display: flex; gap: 7px; }
+  .rd-body { flex: 1; padding: 0; min-height: 0; }
+  .rd-frame { width: 100%; border: none; background: #fff; }
+  .rd-plain { padding: 22px 28px; white-space: pre-wrap; line-height: 1.6; color: #24242a; }
+  .rd-plain .ldim, .ldim { color: var(--ink-3); }
+  .rd-loading { opacity: .85; }
+  .thread { padding: 22px 28px; display: flex; flex-direction: column; gap: 12px; }
+  .bub { max-width: 78%; padding: 9px 13px; border-radius: 14px; background: var(--bg-soft); border: 1px solid var(--line); }
+  .bub.me { align-self: flex-end; background: var(--accent-soft); border-color: #e0defa; }
+  .bub .bw { font-size: 11px; font-weight: 600; color: var(--ink-2); margin-bottom: 3px; }
+  .bub .bt { font-size: 10px; color: var(--ink-3); margin-top: 4px; }
+  .loading { padding: 40px; text-align: center; color: var(--ink-3); }
+
+  /* ---------- Attachments & rich previews ---------- */
+  .attachments { padding: 16px 28px 26px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .att-img { max-width: 260px; max-height: 220px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; object-fit: cover; }
+  .att-file { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line-2); border-radius: 9px; color: var(--ink); text-decoration: none; font-size: 12.5px; background: var(--bg-soft); }
+  .att-file:hover { border-color: var(--ink-3); }
+  .att-file .ext { font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #fff; background: var(--accent); border-radius: 4px; padding: 2px 5px; }
+  .att-file .sz { color: var(--ink-3); }
+  .bub-atts { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .bub-img { max-width: 260px; max-height: 200px; border-radius: 8px; border: 1px solid var(--line); }
+  .embed { border-left: 3px solid var(--c, var(--accent)); background: var(--bg-soft); border-radius: 4px; padding: 8px 11px; display: flex; gap: 10px; text-decoration: none; color: inherit; max-width: 340px; }
+  .embed:hover { background: #f1f0fb; }
+  .embed .etext { min-width: 0; }
+  .embed .eprov { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; }
+  .embed .etitle2 { font-size: 12.5px; font-weight: 600; color: var(--accent); margin: 1px 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .embed .edesc { font-size: 11.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .embed .ethumb { width: 52px; height: 52px; border-radius: 6px; object-fit: cover; flex: none; }
+
+  /* ---------- Shortcut bar ---------- */
+  .shortcuts { height: 47px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 18px; padding: 0 18px; color: var(--ink-3); font-size: 11.5px; background: var(--bg-soft); }
+  .shortcuts b { color: var(--ink-2); font-weight: 500; }
+  .sc { display: inline-flex; align-items: center; gap: 6px; }
+  .sc kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 5px; background: #fff; color: var(--ink-2); }
+
+  /* ---------- Command palette ---------- */
+  .palette-wrap { position: fixed; inset: 0; background: rgba(20,20,26,.28); display: none; align-items: flex-start; justify-content: center; z-index: 50; backdrop-filter: blur(2px); }
+  .palette-wrap.on { display: flex; }
+  .palette { margin-top: 12vh; width: 520px; max-width: 92vw; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.22); overflow: hidden; border: 1px solid var(--line-2); }
+  .palette input { width: 100%; border: none; outline: none; padding: 16px 18px; font-family: inherit; font-size: 15px; border-bottom: 1px solid var(--line); }
+  .palette .opts { max-height: 340px; overflow-y: auto; padding: 6px; }
+  .palette .opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--ink); }
+  .palette .opt.on { background: var(--sel); }
+  .palette .opt .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .palette .opt .hint { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #e2e2e2; border-radius: 6px; border: 3px solid #fff; }
+</style>
+</head>
+<body tabindex="-1">
+  <div class="topbar">
+    <div class="wordmark">
+      <span class="wm-dots"><i style="background:#2f6bff"></i><i style="background:#e0533d"></i><i style="background:#9333ea"></i><i style="background:#12a150"></i></span>
+      Inbox
+    </div>
+    <div class="modeseg">
+      <button class="seg on" data-mode="mail">Mail</button>
+      <button class="seg" data-mode="messages">Messages</button>
+      <button class="seg" data-mode="calendar">Calendar</button>
+      <button class="seg" data-mode="luma">Luma SF</button>
+      <button class="seg" data-mode="tasks">Tasks</button>
+    </div>
+    <div class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+      <input id="search" placeholder="Search all accounts" />
+      <kbd>/</kbd>
+    </div>
+    <div class="spacer"></div>
+    <div class="status"><span class="dotpulse" id="pulse"></span><span id="statusText">loading…</span></div>
+    <button class="icon-btn" id="cmdBtn"><span class="mono">⌘K</span></button>
+    <button class="icon-btn" id="refreshBtn">Refresh</button>
+  </div>
+
+  <div class="pills" id="pills"></div>
+
+  <div class="main">
+    <div class="list" id="list"></div>
+    <div class="reader empty" id="reader">
+      <div class="empty-hint">Select a conversation &nbsp;·&nbsp; navigate with <span class="k">j</span> <span class="k">k</span></div>
+    </div>
+  </div>
+
+  <div class="shortcuts">
+    <span class="sc"><kbd>j</kbd><kbd>k</kbd><kbd>↑</kbd><kbd>↓</kbd> <b>move & preview</b></span>
+    <span class="sc"><kbd>enter</kbd> <b>mark read</b></span>
+    <span class="sc"><kbd>u</kbd> <b>unread only</b></span>
+    <span class="sc"><kbd>e</kbd> <b>mark read</b></span>
+    <span class="sc"><kbd>/</kbd> <b>search</b></span>
+    <span class="sc"><kbd>r</kbd> <b>refresh</b></span>
+    <span class="sc"><kbd>⌘K</kbd> <b>commands</b></span>
+  </div>
+
+  <button class="ask-fab" id="askFab" title="Ask your inbox agent (Cmd-J)">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Ask
+  </button>
+  <div class="ask-float" id="askFloat">
+    <div class="ask-float-head">
+      <div class="ask-float-title"><span class="ask-dot"></span> Ask &mdash; your inbox agent</div>
+      <button class="ask-float-close" id="askClose" title="Close">&times;</button>
+    </div>
+    <div class="chat">
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="1" placeholder="Ask, or tell me to look something up&hellip;"></textarea>
+        <button class="chat-send" id="chatSend">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cal-tip" id="calTip"></div>
+
+  <div class="palette-wrap" id="paletteWrap">
+    <div class="palette">
+      <input id="paletteInput" placeholder="Jump to an account or run a command…" />
+      <div class="opts" id="paletteOpts"></div>
+    </div>
+  </div>
+
+<script>
+const API = (p) => "api/" + p;   // relative -> works behind /service/unified-inbox/
+let SOURCES = {}, MSGS = [], META = {};
+let filterSrc = "all", unreadOnly = false, query = "", sel = 0;
+let DEEP = [], deepQuery = "", deepLoading = false;   // deep full-history search results
+let mode = "mail";        // "mail" | "messages" | "calendar" | "luma" | "tasks"
+let EVENTS = [], evSel = 0;
+let calView = "week", calAnchor = new Date();  // calendar grid state
+let LUMA = [], lumaSel = 0;
+let TASKS = [], taskSel = 0;
+let CHAT = [];  // {role, content} turns in the Ask panel
+let readState = {};  // client-side read marking
+const detailCache = {};  // id -> fetched detail (prefetched for instant reads)
+const CHAT_TTL = 45000;  // chat threads change; re-fetch cached ones after this
+
+const el = (id) => document.getElementById(id);
+function relTime(ts) {
+  if (!ts) return "";
+  const s = Math.floor(Date.now()/1000 - ts);
+  if (s < 60) return "now";
+  if (s < 3600) return Math.floor(s/60) + "m";
+  if (s < 86400) return Math.floor(s/3600) + "h";
+  if (s < 604800) return Math.floor(s/86400) + "d";
+  const d = new Date(ts*1000);
+  return d.toLocaleDateString(undefined, {month:"short", day:"numeric"});
+}
+function esc(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function initials(name){ return (name||"?").trim().split(/\s+/).slice(0,2).map(w=>w[0]||"").join("").toUpperCase() || "?"; }
+function isRead(m){ return readState[m.id] || !m.unread; }
+
+async function load() {
+  SOURCES = await (await fetch(API("sources"))).json();
+  await refreshData();
+  renderPills();
+  setInterval(pollStatus, 4000);
+}
+const _loaded = { events: false, luma: false, tasks: false };
+async function refreshData() {
+  const data = await (await fetch(API("messages"))).json();
+  MSGS = data.messages; META = data.meta;
+  renderPills(); render(); updateStatus();       // paint the inbox immediately
+  // Refresh secondary data only if it was already loaded this session; a tab
+  // never visited stays unfetched until opened (keeps first load light).
+  if (_loaded.events) loadEvents();
+  if (_loaded.luma) loadLuma();
+  if (_loaded.tasks) loadTasks();
+}
+async function loadEvents() {
+  _loaded.events = true;
+  try { EVENTS = (await (await fetch(API("events"))).json()).events || []; } catch(e) { EVENTS = []; }
+  if (mode === "calendar") render();
+}
+async function loadLuma() {
+  _loaded.luma = true;
+  try { LUMA = (await (await fetch(API("luma"))).json()).events || []; } catch(e) { LUMA = []; }
+  if (mode === "luma" || mode === "calendar") render();  // the calendar overlays Luma, so repaint it too
+}
+async function loadTasks() {
+  _loaded.tasks = true;
+  try { TASKS = (await (await fetch(API("tasks"))).json()).tasks || []; } catch(e) { TASKS = []; }
+  if (mode === "tasks") render();
+}
+async function pollStatus() {
+  // Cheap poll: fetch only the small status blob (a few hundred bytes). Re-pull
+  // the full data set + re-render ONLY when the background refresh advanced --
+  // avoids re-downloading the whole message list every few seconds over the
+  // network tunnel, which is what made the tab feel sluggish.
+  let meta;
+  try { meta = await (await fetch(API("status"))).json(); } catch(e) { return; }
+  const changed = meta.last_refresh !== META.last_refresh;
+  META = meta;
+  updateStatus();
+  if (changed) await refreshData();
+}
+function updateStatus() {
+  el("pulse").classList.toggle("on", !!META.refreshing);
+  const t = META.last_refresh ? relTime(META.last_refresh) : "—";
+  el("statusText").textContent = META.refreshing ? "syncing…" : `synced ${t} ago`;
+}
+
+function counts() {
+  const c = {}; Object.keys(SOURCES).forEach(k=>c[k]=0);
+  MSGS.forEach(m => { if (!isRead(m)) c[m.source] = (c[m.source]||0)+1; });
+  return c;
+}
+function renderPills() {
+  const c = counts();
+  // Only this tab's sources; the "all" count is scoped to the tab too.
+  const scopedSrcs = Object.entries(SOURCES).filter(([k]) => inScope(k));
+  const total = scopedSrcs.reduce((a,[k]) => a + (c[k]||0), 0);
+  const allLabel = mode === "messages" ? "All messages" : "All mail";
+  let html = `<div class="pill ${filterSrc==='all'?'on':''}" data-src="all">${allLabel} ${total?`<span class="n">${total}</span>`:''}</div>`;
+  html += `<div class="pill ${unreadOnly?'on':''}" data-toggle="unread">Unread</div>`;
+  html += `<div class="pill sep">|</div>`;
+  for (const [k,s] of scopedSrcs) {
+    html += `<div class="pill ${filterSrc===k?'on':''}" data-src="${k}">
+      <span class="dot" style="background:${s.color}"></span>${s.short}${c[k]?`<span class="n">${c[k]}</span>`:''}</div>`;
+  }
+  el("pills").innerHTML = html;
+  el("pills").querySelectorAll("[data-src]").forEach(p=>p.onclick=()=>{filterSrc=p.dataset.src;sel=0;render();renderPills();});
+  el("pills").querySelectorAll("[data-toggle]").forEach(p=>p.onclick=()=>{unreadOnly=!unreadOnly;sel=0;render();renderPills();});
+}
+
+// Fuzzy subsequence scorer: every query token must appear (in order) in the
+// haystack; bonuses for consecutive chars and word starts. Returns -1 if no match.
+function subseqScore(hay, tok) {
+  let hi = 0, score = 0, streak = 0;
+  for (const c of tok) {
+    let found = -1;
+    for (let i = hi; i < hay.length; i++) { if (hay[i] === c) { found = i; break; } }
+    if (found < 0) return -1;
+    if (found === hi) { streak++; score += 2 + streak; } else { streak = 0; score += 1; }
+    if (found === 0 || /[\s\W_]/.test(hay[found - 1])) score += 3;
+    hi = found + 1;
+  }
+  return score;
+}
+function fuzzyScore(hay, q) {
+  hay = hay.toLowerCase();
+  let total = 0;
+  for (const tok of q.toLowerCase().trim().split(/\s+/)) {
+    if (!tok) continue;
+    const s = subseqScore(hay, tok);
+    if (s < 0) return -1;   // every token must match somewhere
+    total += s;
+  }
+  return total;
+}
+
+// Fuzzy on the short title (who + subject) so typos still hit; fall back to an
+// exact substring match in the body so searching message text still works --
+// but WITHOUT fuzzy-subsequencing long snippets (which matches almost anything).
+function messageScore(m, q) {
+  const fs = fuzzyScore(`${m.who} ${m.subject}`, q);
+  if (fs >= 0) return fs + 100;
+  const hay = `${m.who} ${m.subject} ${m.snippet}`.toLowerCase();
+  const toks = q.toLowerCase().trim().split(/\s+/);
+  return toks.every(t => hay.includes(t)) ? 10 : -1;
+}
+// Which sources belong to the current tab. Mail = email + GitHub; Messages =
+// the chat sources (Slack/Discord/Telegram).
+function inScope(source){
+  const g = (SOURCES[source]||{}).group;
+  if (mode === "messages") return g === "Chat";
+  return g === "Email" || g === "Dev";   // mail tab
+}
+function visible() {
+  const q = query.trim();
+  let items = MSGS.filter(m => {
+    if (!inScope(m.source)) return false;
+    if (filterSrc !== "all" && m.source !== filterSrc) return false;
+    if (unreadOnly && isRead(m)) return false;
+    return true;
+  });
+  if (q) {
+    items = items
+      .map(m => ({ m, s: messageScore(m, q) }))
+      .filter(x => x.s >= 0)
+      .sort((a, b) => b.s - a.s)
+      .map(x => x.m);
+    // Append deep full-history results (deduped against cached) when they're for
+    // the current query -- so selection indexing spans both sets seamlessly.
+    if (deepQuery === q && DEEP.length) {
+      const have = new Set(items.map(m => m.id));
+      items = items.concat(DEEP.filter(m => !have.has(m.id)));
+    }
+  }
+  return items;
+}
+function cachedCount() {  // how many of visible() are cached (vs deep) -- for the divider
+  const q = query.trim();
+  if (!q) return MSGS.length;
+  return MSGS.filter(m => (filterSrc==="all"||m.source===filterSrc) && !(unreadOnly&&isRead(m)) && messageScore(m,q)>=0).length;
+}
+async function runDeepSearch() {
+  const q = query.trim(); if (!q || deepLoading) return;
+  deepLoading = true; renderInbox();
+  try {
+    const r = await (await fetch(API("search?q=" + encodeURIComponent(q)))).json();
+    DEEP = r.results || []; deepQuery = q;
+  } catch(e) { DEEP = []; }
+  deepLoading = false; render();
+}
+function renderInbox() {
+  const items = visible();
+  const q = query.trim();
+  const nCached = q ? cachedCount() : items.length;
+  if (sel >= items.length) sel = Math.max(0, items.length-1);
+  const rows = items.map((m,i) => {
+    const s = SOURCES[m.source] || {color:"#999", short:m.source};
+    const divider = (q && i === nCached) ? `<div class="deep-divider">From your full history</div>` : "";
+    return divider + `<div class="row ${isRead(m)?'read':''} ${i===sel?'sel':''} ${m.deep?'deep':''}" data-i="${i}">
+      <div class="bar"></div>
+      <div class="c">
+        <div class="top">
+          <span class="srcdot" style="background:${s.color}"></span>
+          <span class="who">${esc(m.who)}</span>
+          <span class="tag" style="color:${s.color};background:${s.color}18">${s.short}</span>
+          ${m.open_external?'<span class="ext-tag">opens in Slack</span>':''}
+        </div>
+        <div class="subj">${esc(m.subject)}</div>
+        <div class="snip">${esc(m.snippet)}</div>
+      </div>
+      <div class="meta"><span class="time mono">${relTime(m.ts)}</span><span class="udot"></span></div>
+    </div>`;
+  }).join("");
+  // Footer: offer a deep full-history search when the user is searching.
+  let footer = "";
+  if (q && deepQuery !== q) {
+    footer = deepLoading
+      ? `<div class="deep-btn loading-inline">Searching all mail &amp; Slack…</div>`
+      : `<div class="deep-btn" id="deepBtn">🔍 Search all mail &amp; Slack for “${esc(q)}”</div>`;
+  }
+  el("list").innerHTML = (items.length ? rows : `<div class="loading">No cached conversations match.</div>`) + footer;
+  el("list").querySelectorAll(".row").forEach(r=>{
+    r.onclick=()=>{sel=+r.dataset.i;open();};
+    r.onmouseenter=()=>{ const m=visible()[+r.dataset.i]; if(m && !m.open_external) getDetail(m); };
+  });
+  const db = el("deepBtn"); if (db) db.onclick = runDeepSearch;
+  const selRow = el("list").querySelector(".row.sel");
+  if (selRow) selRow.scrollIntoView({block:"nearest"});
+  prefetch();
+}
+
+// Cache-aware detail fetch. Emails are immutable -> cache forever; chat
+// threads change -> re-fetch after a short TTL. Concurrent calls share one
+// in-flight promise so prefetch + open don't double-fetch.
+function getDetail(m) {
+  if (m.open_external) return Promise.resolve(null);  // deep Slack result opens out; it has no body route
+  const c = detailCache[m.id];
+  if (c && c._promise) return c._promise;
+  const fresh = c && (m.kind === "email" || (Date.now() - c._at < CHAT_TTL));
+  if (fresh) return Promise.resolve(c);
+  const p = fetch(API("message/" + encodeURIComponent(m.id)))
+    .then(r => r.json())
+    .then(d => { if (!d || d.error) return c || null;  // server couldn't load it -> show the fallback
+                 d._at = Date.now(); detailCache[m.id] = d; return d; })
+    .catch(() => c || null);
+  detailCache[m.id] = { _promise: p, _at: (c && c._at) || 0 };
+  return p;
+}
+
+function prefetch() {
+  const items = visible();
+  [sel, sel + 1, sel + 2, sel - 1].forEach(i => { if (items[i]) getDetail(items[i]); });
+}
+
+// ---- Attachment / embed rendering helpers ----
+function fmtSize(n){ if(!n) return ""; if(n<1024) return n+" B"; if(n<1048576) return Math.round(n/1024)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
+function attExt(name){ const p=(name||"").split("."); return p.length>1?p.pop():"file"; }
+function emailAttHtml(a, mid){
+  const base = `api/attachment/${encodeURIComponent(mid)}?ref=${encodeURIComponent(a.ref)}&mime=${encodeURIComponent(a.mime)}`;
+  if ((a.mime||"").startsWith("image")) return `<a href="${base}&dl=1&name=${encodeURIComponent(a.name)}" target="_blank"><img class="att-img" src="${base}" alt="${esc(a.name)}"></a>`;
+  return `<a class="att-file" href="${base}&dl=1&name=${encodeURIComponent(a.name)}" target="_blank"><span class="ext">${esc(attExt(a.name))}</span>${esc(a.name)} <span class="sz">${fmtSize(a.size)}</span></a>`;
+}
+function chatAttHtml(a){
+  if (a.is_image && a.url) return `<a href="${a.url}" target="_blank"><img class="bub-img" src="${a.url}" alt="${esc(a.name)}"></a>`;
+  if (a.url) return `<a class="att-file" href="${a.url}" target="_blank"><span class="ext">${esc(attExt(a.name))}</span>${esc(a.name)}</a>`;
+  return `<span class="att-file"><span class="ext">${esc(attExt(a.name))}</span>${esc(a.name)}</span>`;
+}
+function embedHtml(e){
+  if (!e.title && !e.description && !e.image) return "";
+  const img = e.image ? `<img class="ethumb" src="${e.image}" alt="">` : "";
+  return `<a class="embed" href="${e.url||'#'}" target="_blank" rel="noopener">${img}<div class="etext">${e.provider?`<div class="eprov">${esc(e.provider)}</div>`:''}<div class="etitle2">${esc(e.title||e.url||'')}</div>${e.description?`<div class="edesc">${esc(e.description)}</div>`:''}</div></a>`;
+}
+
+async function open(markRead = true) {
+  const items = visible();
+  const m = items[sel];
+  if (!m) return;
+  if (m.open_external) { window.open(m.url, "_blank", "noopener"); return; }  // Slack deep result
+  if (markRead && !readState[m.id]) { readState[m.id] = true; renderPills(); }
+  render();
+  const cached = detailCache[m.id];
+  const haveNow = cached && !cached._promise;
+  const reader = el("reader");
+  reader.classList.remove("empty");
+  const s = SOURCES[m.source];
+
+  const head = `
+    <div class="rd-head">
+      <div class="rd-src"><span class="srcdot" style="background:${s.color}"></span> ${s.provider} · ${esc(s.label)}</div>
+      <h1 class="rd-subj">${esc(m.subject)}</h1>
+      <div class="rd-from">
+        <div class="rd-av" style="background:${s.color}">${initials(m.who)}</div>
+        <div><div class="rd-name">${esc(m.who)}</div><div class="rd-addr">${esc(m.addr||'')}</div></div>
+        <div class="rd-actions">
+          <a class="icon-btn" href="${m.url}" target="_blank" rel="noopener">Open in ${s.provider}</a>
+        </div>
+      </div>
+    </div>`;
+
+  // Optimistic paint: show the header + a snippet placeholder INSTANTLY from
+  // list data, so the panel is never blank while the body loads.
+  if (!haveNow) reader.innerHTML = head + `<div class="rd-body"><div class="rd-plain rd-loading">${esc(m.snippet||'')}${m.snippet?'\n\n':''}<span class="ldim">Loading full content…</span></div></div>`;
+  const detail = await getDetail(m);
+  if (!detail) { reader.innerHTML = head + `<div class="rd-body"><div class="rd-plain"><span class="ldim">Couldn't load this — use “Open in ${s.provider}” above.</span></div></div>`; return; }
+  if (items[sel] !== m) return;  // selection moved while loading; drop stale render
+
+  if (m.kind === "email" || m.kind === "github") {
+    reader.innerHTML = head + `<div class="rd-body" id="rdBody"></div>`;
+    const body = el("rdBody");
+    if (detail.is_html && detail.body) {
+      const frame = document.createElement("iframe");
+      frame.className = "rd-frame";
+      frame.setAttribute("sandbox", "");
+      frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'"><base target="_blank"><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#222;padding:22px 28px;margin:0;line-height:1.55}img{max-width:100%}</style>` + detail.body;
+      body.appendChild(frame);
+      const fit = () => { try { frame.style.height = Math.max(320, frame.contentWindow.document.body.scrollHeight + 40) + "px"; } catch(e){ frame.style.height="70vh"; } };
+      frame.onload = fit; setTimeout(fit, 300);
+    } else {
+      body.innerHTML = `<div class="rd-plain">${esc(detail.body || m.snippet)}</div>`;
+    }
+    if (detail.attachments && detail.attachments.length) {
+      const at = document.createElement("div");
+      at.className = "attachments";
+      at.innerHTML = detail.attachments.map(a => emailAttHtml(a, m.id)).join("");
+      reader.appendChild(at);
+    }
+  } else {
+    const bubbles = (detail.thread||[]).map(b => {
+      const atts = (b.attachments||[]).map(chatAttHtml).join("");
+      const embs = (b.embeds||[]).map(embedHtml).join("");
+      const extra = (atts||embs) ? `<div class="bub-atts" style="--c:${s.color}">${atts}${embs}</div>` : "";
+      const text = b.text ? esc(b.text) : "";
+      return `<div class="bub ${b.me?'me':''}"><div class="bw" style="color:${s.color}">${esc(b.who)}</div>${text}${extra}<div class="bt mono">${relTime(b.ts)}</div></div>`;
+    }).join("") || `<div class="loading">${esc(m.snippet)}</div>`;
+    reader.innerHTML = head + `<div class="thread" style="--c:${s.color}">${bubbles}</div>`;
+  }
+}
+
+/* ---------- Mode dispatch + calendar ---------- */
+const INBOX_MODES = new Set(["mail", "messages"]);
+function render() {
+  document.querySelector(".pills").style.display = INBOX_MODES.has(mode) ? "flex" : "none";
+  document.querySelector(".main").classList.toggle("cal", mode === "calendar");
+  if (mode === "calendar") renderCalendar();
+  else if (mode === "luma") renderLuma();
+  else if (mode === "tasks") renderTasks();
+  else renderInbox();
+}
+function setMode(m) {
+  const prev = mode;
+  mode = m;
+  document.querySelectorAll(".seg").forEach(s => s.classList.toggle("on", s.dataset.mode === m));
+  el("reader").classList.add("empty");
+  // Switching between Mail and Messages resets the per-source filter + selection.
+  if (INBOX_MODES.has(m) && m !== prev) { filterSrc = "all"; sel = 0; }
+  const what = m === "calendar" ? "an event" : m === "luma" ? "an event to open on Luma" : m === "tasks" ? "a task" : (m === "messages" ? "a conversation" : "a message");
+  el("reader").innerHTML = `<div class="empty-hint">Select ${what} &nbsp;·&nbsp; navigate with <span class="k">j</span> <span class="k">k</span></div>`;
+  // Lazily fetch this view's data the first time it's opened. The calendar
+  // overlays Luma events, so it needs both.
+  if (m === "calendar" && !_loaded.events) loadEvents();
+  if ((m === "calendar" || m === "luma") && !_loaded.luma) loadLuma();
+  if (m === "tasks" && !_loaded.tasks) loadTasks();
+  if (INBOX_MODES.has(m)) renderPills();  // pills are scoped to the current tab's sources
+  render();
+  if (m === "tasks") showTaskGraph();  // graph fills the right panel in Tasks mode
+}
+document.querySelectorAll(".seg").forEach(s => s.onclick = () => setMode(s.dataset.mode));
+
+function dayKey(ts){ const d=new Date(ts*1000); return d.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}); }
+function evTime(e){
+  if (e.all_day) return "all day";
+  const d=new Date(e.start*1000);
+  return d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+}
+// Merged calendar feed: Google/Zoho events + Luma SF, normalized and DEDUPED.
+// The same event subscribed in multiple calendars collapses to one, remembering
+// every calendar it came from (shown as "also in ...").
+function calAllEvents(){
+  // Only overlay Luma events the user has a relationship with (going/pending/invited)
+  // -- NOT the whole public discover feed, which would flood the calendar.
+  const luma = LUMA.filter(e => e.status && e.status !== "discover")
+    .map(e => ({title:e.name, start:e.start, end:e.end||e.start+3600, all_day:false, color:"#e0533d", url:e.url, calendar:`Luma · ${e.status}`, location:e.location, luma:e}));
+  const byKey = {};
+  EVENTS.concat(luma).forEach(e => {
+    const key = `${(e.title||"").toLowerCase().trim()}|${Math.round((e.start||0)/60)}|${e.all_day?1:0}`;
+    if (byKey[key]) { if (!byKey[key]._cals.includes(e.calendar)) byKey[key]._cals.push(e.calendar); }
+    else byKey[key] = {...e, _cals:[e.calendar]};
+  });
+  return Object.values(byKey);
+}
+let _calEv = [];  // index -> event, for click/hover in the grid
+function showCalEvent(e){
+  if (!e) return;
+  document.querySelectorAll(".cal-event.sel, .cal-chip.sel").forEach(x => x.classList.remove("sel"));
+  const reader = el("reader"); reader.classList.remove("empty");
+  const when = e.all_day
+    ? new Date(e.start*1000).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}) + " · all day"
+    : new Date(e.start*1000).toLocaleString(undefined,{weekday:"long",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) +
+      " – " + new Date((e.end||e.start)*1000).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+  const others = (e._cals||[e.calendar]).filter(c => c && c !== e.calendar);
+  const alsoIn = others.length ? `<div class="rd-addr" style="margin-top:4px">also in: ${others.map(esc).join(", ")}</div>` : "";
+  if (e.luma){ showLumaDetail(e.luma); return; }  // rich Luma card
+  reader.innerHTML = `
+    <div class="rd-head" style="--c:${e.color}">
+      <div class="rd-src"><span class="srcdot" style="background:${e.color}"></span> ${esc(e.calendar)}</div>
+      <h1 class="rd-subj">${esc(e.title)}</h1>
+      <div class="rd-from">
+        <div><div class="rd-name">${esc(when)}</div>${e.location?`<div class="rd-addr">${esc(e.location)}</div>`:''}${alsoIn}</div>
+        <div class="rd-actions"><a class="icon-btn" href="${e.url}" target="_blank" rel="noopener">Open in calendar</a></div>
+      </div>
+    </div>
+    <div class="rd-body"><div class="rd-plain">${e.location?'Location: '+esc(e.location)+'\n':''}${e.all_day?'All-day event.':''}</div></div>`;
+}
+function calTip(ev, e){
+  const tip = el("calTip");
+  if (!e){ tip.style.display="none"; return; }
+  const t = e.all_day ? "all day" : new Date(e.start*1000).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+  tip.innerHTML = `<div class="tt">${esc(e.title)}</div><div class="ts">${t} · ${esc((e._cals||[e.calendar]).join(", "))}${e.location?' · '+esc(e.location):''}</div>`;
+  tip.style.display = "block";
+  const x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 10);
+  const y = Math.min(ev.clientY + 12, window.innerHeight - tip.offsetHeight - 10);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+async function showLumaDetail(e){
+  const reader = el("reader"); reader.classList.remove("empty");
+  const when = e.start ? new Date(e.start*1000).toLocaleString(undefined,{weekday:"long",month:"long",day:"numeric",hour:"numeric",minute:"2-digit"}) : "";
+  reader.innerHTML = `<div class="luma-detail">
+    ${e.cover?`<img class="luma-detail-cover" src="${e.cover}" alt="">`:''}
+    <div class="luma-detail-body">
+      <div class="luma-detail-tag"><span class="srcdot" style="background:#e0533d"></span> Luma · San Francisco</div>
+      <h1 class="rd-subj">${esc(e.name)}</h1>
+      <div class="luma-detail-row">🗓&nbsp; ${esc(when)}</div>
+      ${e.location?`<div class="luma-detail-row">📍&nbsp; ${esc(e.location)}</div>`:''}
+      <a class="luma-open" href="${e.url}" target="_blank" rel="noopener">Open on Luma / RSVP →</a>
+      <div class="luma-desc" id="lumaDesc"><span class="ldim">Loading details…</span></div>
+    </div></div>`;
+  try {
+    const d = await (await fetch(API("luma-event/" + encodeURIComponent(e.id)))).json();
+    const desc = el("lumaDesc"); if (!desc) return;
+    let h = "";
+    if (d.calendar) h += `<div class="luma-detail-row">🎪&nbsp; ${esc(d.calendar)}</div>`;
+    if (d.hosts && d.hosts.length) h += `<div class="luma-detail-row">👤&nbsp; Hosted by ${esc(d.hosts.join(", "))}</div>`;
+    if (d.guest_count) h += `<div class="luma-detail-row">🎟&nbsp; ${d.guest_count} going</div>`;
+    if (d.location) h += `<div class="luma-detail-row">📍&nbsp; ${esc(d.location)}${d.timezone?` · ${esc(d.timezone)}`:''}</div>`;
+    // The full prose description is server-rendered HTML from Luma's rich-text
+    // doc; fall back to the short calendar blurb, then a link prompt.
+    if (d.description_html) h += `<div class="luma-prose">${d.description_html}</div>`;
+    else if (d.description) h += `<div class="luma-prose">${esc(d.description)}</div>`;
+    desc.innerHTML = h || `<span class="ldim">Open on Luma for the full description.</span>`;
+  } catch(err){ const desc = el("lumaDesc"); if (desc) desc.innerHTML = `<span class="ldim">Open on Luma for the full description.</span>`; }
+}
+function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function calDays(){
+  const s = startOfDay(calAnchor);
+  if (calView === "week") s.setDate(s.getDate() - s.getDay());
+  const n = calView === "week" ? 7 : 3;
+  return Array.from({length:n}, (_,i) => { const d = new Date(s); d.setDate(s.getDate()+i); return d; });
+}
+const CAL_HOUR_H = 44;
+function packDay(evs){  // assign side-by-side columns to overlapping events
+  evs.sort((a,b) => a._s - b._s || a._e - b._e);
+  let cluster = [], cend = -1;
+  const flush = () => {
+    const cols = [];
+    cluster.forEach(e => { let c = 0; while (c < cols.length && cols[c] > e._s + 1e-4) c++; e._col = c; cols[c] = e._e; });
+    cluster.forEach(e => e._n = cols.length);
+    cluster = [];
+  };
+  evs.forEach(e => { if (cluster.length && e._s >= cend) { flush(); cend = -1; } cluster.push(e); cend = Math.max(cend, e._e); });
+  flush();
+}
+function renderCalendar(){
+  const days = calDays(), N = days.length;
+  const cols = `56px repeat(${N}, 1fr)`;
+  const evs = calAllEvents();
+  const rangeStart = days[0].getTime()/1000, rangeEnd = days[N-1].getTime()/1000 + 86400;
+  const inRange = evs.filter(e => (e.end||e.start) > rangeStart && e.start < rangeEnd);
+  const today = startOfDay(new Date()).getTime();
+
+  const legend = {}; evs.forEach(e => legend[e.calendar] = e.color);
+  const legendHtml = Object.entries(legend).slice(0,8).map(([n,c]) => `<span><i style="background:${c}"></i>${esc(n)}</span>`).join("");
+  const rangeLbl = days[0].toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " – " +
+                   days[N-1].toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  const headHtml = days.map(d => `<div class="cal-dh ${d.getTime()===today?'today':''}"><div class="dow">${d.toLocaleDateString(undefined,{weekday:"short"})}</div><div class="dnum">${d.getDate()}</div></div>`).join("");
+
+  _calEv = [];
+  // A "spanning" event is anything all-day OR a timed event long enough to fill
+  // a whole day (>= 20h) -- e.g. a multi-day hackathon. Left in the timed grid
+  // those clamp to a full-height column on every day they touch, walling off the
+  // view; instead they render once as a bar in the all-day band.
+  const spanning = e => e.all_day || (((e.end||e.start) - e.start) >= 20*3600);
+  // Spanning events as bars (Google-Calendar style): each shows ONCE across the
+  // days it covers, instead of a redundant chip per day. Bars are packed into
+  // lanes so overlapping ones stack.
+  const dayStart = days[0].getTime()/1000;
+  const allday = inRange.filter(spanning)
+    .map(e => {
+      const sCol = Math.max(0, Math.floor((e.start - dayStart)/86400));
+      const eCol = Math.min(N-1, Math.floor(((e.end||e.start) - 1 - dayStart)/86400));
+      return {e, sCol, eCol: Math.max(sCol, eCol)};
+    })
+    .sort((a,b) => a.sCol - b.sCol || a.eCol - b.eCol);
+  const lanes = [];  // lanes[i] = last eCol occupied
+  allday.forEach(it => {
+    let lane = lanes.findIndex(end => end < it.sCol);
+    if (lane < 0) { lane = lanes.length; lanes.push(it.eCol); } else lanes[lane] = it.eCol;
+    it.lane = lane;
+  });
+  const laneCount = Math.max(1, lanes.length);
+  const bars = allday.map(it => {
+    const spans = it.eCol > it.sCol;
+    return `<div class="cal-abar" style="grid-column:${it.sCol+2}/${it.eCol+3};grid-row:${it.lane+1};background:${it.e.color}"
+      data-ci="${_calEv.push(it.e)-1}" title="${esc(it.e.title)}${spans?' (all-day)':''}">${esc(it.e.title)}</div>`;
+  }).join("");
+  const alldayGrid = `<div class="cal-corner cal-allday-label">all-day</div>${bars}`;
+
+  const bodyH = 24*CAL_HOUR_H;
+  const axisHtml = Array.from({length:24},(_,h)=>`<div class="hr" style="top:${h*CAL_HOUR_H}px">${h===0?'':((h%12)||12)+(h<12?'am':'pm')}</div>`).join("");
+  const nowTop = (new Date().getHours()*60 + new Date().getMinutes())/60*CAL_HOUR_H;
+  const dayCols = days.map(d => {
+    const ds=d.getTime()/1000, de=ds+86400;
+    const items = inRange.filter(e => !spanning(e) && e.start < de && (e.end||e.start) > ds).map(e => {
+      const s=Math.max(e.start,ds), en=Math.min(e.end||e.start+1800, de);
+      return {...e, _s:(s-ds)/3600, _e:Math.max((en-ds)/3600, (s-ds)/3600+0.4)};
+    });
+    packDay(items);
+    const evHtml = items.map(e => {
+      const top=e._s*CAL_HOUR_H, h=Math.max(16,(e._e-e._s)*CAL_HOUR_H-2), w=100/e._n, left=e._col*w;
+      const t=new Date(e.start*1000).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+      return `<div class="cal-event" style="top:${top}px;height:${h}px;left:calc(${left}% + 1px);width:calc(${w}% - 3px);background:${e.color}" data-ci="${_calEv.push(e)-1}">
+        <div class="ce-t">${esc(e.title)}</div><div class="ce-time">${t}</div></div>`;
+    }).join("");
+    const nowLine = d.getTime()===today ? `<div class="cal-now" style="top:${nowTop}px;left:0;right:0"></div>` : "";
+    return `<div class="cal-col" style="height:${bodyH}px">${evHtml}${nowLine}</div>`;
+  }).join("");
+
+  el("list").innerHTML = `<div class="calv">
+    <div class="cal-toolbar">
+      <div class="cal-nav"><button class="cal-btn" id="calToday">Today</button><button class="cal-btn" id="calPrev">‹</button><button class="cal-btn" id="calNext">›</button></div>
+      <span class="cal-range">${rangeLbl}</span>
+      <div class="cal-nav" style="margin-left:12px"><button class="cal-btn ${calView==='week'?'on':''}" data-cv="week">Week</button><button class="cal-btn ${calView==='3day'?'on':''}" data-cv="3day">3-day</button></div>
+      <div class="cal-legend">${legendHtml}</div>
+    </div>
+    <div class="cal-head" style="grid-template-columns:${cols}"><div class="cal-corner"></div>${headHtml}</div>
+    <div class="cal-allday" style="grid-template-columns:${cols};grid-template-rows:repeat(${laneCount}, 20px)">${alldayGrid}</div>
+    <div class="cal-body" id="calBody"><div class="cal-grid" style="grid-template-columns:${cols}"><div class="cal-axis" style="height:${bodyH}px">${axisHtml}</div>${dayCols}</div></div>
+  </div>`;
+
+  el("calToday").onclick = () => { calAnchor = new Date(); render(); };
+  el("calPrev").onclick = () => { calAnchor.setDate(calAnchor.getDate() - (calView==='week'?7:3)); render(); };
+  el("calNext").onclick = () => { calAnchor.setDate(calAnchor.getDate() + (calView==='week'?7:3)); render(); };
+  document.querySelectorAll("[data-cv]").forEach(b => b.onclick = () => { calView = b.dataset.cv; render(); });
+  el("list").querySelectorAll("[data-ci]").forEach(x => {
+    const ev = _calEv[+x.dataset.ci];
+    x.onclick = () => { document.querySelectorAll(".cal-event.sel,.cal-chip.sel").forEach(s=>s.classList.remove("sel")); x.classList.add("sel"); showCalEvent(ev); };
+    x.onmousemove = (me) => calTip(me, ev);
+    x.onmouseleave = () => calTip(null, null);
+  });
+  const body = el("calBody"); if (body) body.scrollTop = 7*CAL_HOUR_H;  // open around 7am
+}
+
+/* ---------- Luma SF ---------- */
+let lumaFilter = "all";  // all | going | pending | invited | discover
+const LUMA_STATUS = {going:{label:"Going",color:"#12a150"}, pending:{label:"Pending",color:"#c9820a"}, invited:{label:"Invited",color:"#5b53e0"}, discover:{label:"Discover",color:"#9498a1"}};
+function upcomingLuma(){
+  const q = query.trim();
+  let items = LUMA.slice();
+  if (lumaFilter !== "all") items = items.filter(e => (e.status||"discover") === lumaFilter);
+  if (q) items = items.map(e=>({e,s:fuzzyScore(`${e.name} ${e.location}`,q)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).map(x=>x.e);
+  return items;
+}
+function renderLuma(){
+  const items = upcomingLuma();
+  if (lumaSel >= items.length) lumaSel = Math.max(0, items.length-1);
+  const list = el("list");
+  // Filter pills with counts, so the user can flip between what he's going to / pending / invited / discover.
+  const counts = {}; LUMA.forEach(e => { const s=e.status||"discover"; counts[s]=(counts[s]||0)+1; });
+  const pill = (k,label) => `<button class="luma-pill ${lumaFilter===k?'on':''}" data-lf="${k}">${label}${k!=="all"&&counts[k]?` <span class="n">${counts[k]}</span>`:""}</button>`;
+  let pills = `<div class="luma-pills">${pill("all","All")}${["going","pending","invited","discover"].map(k=>pill(k,LUMA_STATUS[k].label)).join("")}</div>`;
+  if (!items.length){ list.innerHTML = pills + `<div class="loading">No ${lumaFilter==="all"?"":lumaFilter+" "}Luma events${query?" match":""}.</div>`; bindLumaPills(); return; }
+  const todayKey = dayKey(Date.now()/1000);
+  let html = "", lastDay = null;
+  items.forEach((e,i)=>{
+    if (!query){ const dk = dayKey(e.start); if (dk !== lastDay){ html += `<div class="luma-day ${dk===todayKey?'today':''}">${dk===todayKey?'Today · ':''}${dk}</div>`; lastDay = dk; } }
+    const t = e.start ? new Date(e.start*1000).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}) : "";
+    const cover = e.cover ? `<img class="luma-cover" src="${e.cover}" alt="">` : `<div class="luma-cover"></div>`;
+    const st = LUMA_STATUS[e.status||"discover"];
+    const badge = (e.status && e.status!=="discover") ? `<span class="luma-badge" style="color:${st.color};background:${st.color}1a">${st.label}</span>` : "";
+    html += `<div class="luma-card ${i===lumaSel?'sel':''}" data-i="${i}">${cover}
+      <div class="luma-body"><div class="luma-time">${t}${badge}</div><div class="luma-name">${esc(e.name)}</div>
+      <div class="luma-loc">${esc(e.location)}</div></div></div>`;
+  });
+  list.innerHTML = pills + `<div class="luma-wrap">${html}</div>`;
+  bindLumaPills();
+  list.querySelectorAll(".luma-card").forEach(c => c.addEventListener("click", ()=>{ lumaSel = +c.dataset.i; renderLuma(); showLumaDetail(items[lumaSel]); }));
+  const sc = list.querySelector(".luma-card.sel"); if (sc) sc.scrollIntoView({block:"nearest"});
+}
+function bindLumaPills(){ document.querySelectorAll(".luma-pill").forEach(p => p.onclick = ()=>{ lumaFilter=p.dataset.lf; lumaSel=0; renderLuma(); }); }
+function moveLuma(d){ const items=upcomingLuma(); if(!items.length)return; lumaSel=Math.max(0,Math.min(items.length-1,lumaSel+d)); renderLuma(); showLumaDetail(items[lumaSel]); }
+function openLuma(){ const e=upcomingLuma()[lumaSel]; if(e) window.open(e.url,"_blank","noopener"); }
+
+/* ---------- Tasks (Obsidian vault) ---------- */
+function visibleTasks(){
+  const q = query.trim();
+  let items = TASKS.slice();
+  if (q) items = items.map(t=>({t,s:fuzzyScore(`${t.text} ${t.file}`,q)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).map(x=>x.t);
+  return items;
+}
+function renderTasks(){
+  const items = visibleTasks();
+  if (taskSel >= items.length) taskSel = Math.max(0, items.length-1);
+  const list = el("list");
+  if (!items.length){ list.innerHTML = `<div class="loading">No open tasks${query?" match":""} in your vault.</div>`; return; }
+  let html = "", lastFile = null;
+  items.forEach((t,i)=>{
+    if (!query && t.file !== lastFile){ html += `<div class="task-group">${esc(t.file)}</div>`; lastFile = t.file; }
+    let meta = "";
+    if (t.due){ const overdue = t.due < new Date().toISOString().slice(0,10); meta += `<span class="task-due${overdue?' overdue':''}">📅 ${esc(t.due)}</span>`; }
+    if (t.tag){ meta += `<span class="task-tag">#${esc(t.tag)}</span>`; }
+    html += `<div class="task-row ${i===taskSel?'sel':''}" data-i="${i}"><div class="task-box"></div>
+      <div><div class="task-text">${esc(t.text)}</div>${meta?`<div class="task-meta">${meta}</div>`:''}</div></div>`;
+  });
+  list.innerHTML = html;
+  list.querySelectorAll(".task-row").forEach(r => r.addEventListener("click", ()=>{ taskSel = +r.dataset.i; renderTasks(); showTaskGraph(); }));
+  const s = list.querySelector(".task-row.sel"); if (s) s.scrollIntoView({block:"nearest"});
+}
+function moveTask(d){ const items=visibleTasks(); if(!items.length)return; taskSel=Math.max(0,Math.min(items.length-1,taskSel+d)); renderTasks(); showTaskGraph(); }
+
+/* ---------- Obsidian graph (force-directed canvas in the Tasks panel) ---------- */
+let GRAPH = null, _graphAnim = null;
+async function showTaskGraph(){
+  const reader = el("reader"); reader.classList.remove("empty");
+  if (!reader.querySelector(".graph-wrap")){
+    reader.innerHTML = `<div class="graph-wrap"><div class="graph-head">Vault graph · <b id="graphCount">…</b><a class="graph-rebuild" id="graphRebuild">rebuild</a><span class="graph-hint">drag a node · drag canvas to pan · scroll to zoom</span></div>
+      <canvas id="graphCanvas"></canvas><div class="graph-tip" id="graphTip"></div>
+      <div class="graph-building" id="graphBuilding">Building your vault graph… (first time reads every note)</div></div>`;
+    el("graphRebuild").onclick = rebuildGraph;
+  }
+  if (!GRAPH){
+    try {
+      const g = await (await fetch(API("graph"))).json();
+      if (g.building || !g.nodes.length){ setTimeout(()=>{ if(mode==="tasks"){ GRAPH=null; showTaskGraph(); } }, 4000); return; }
+      GRAPH = g;
+    } catch(e){ return; }
+  }
+  const bld = el("graphBuilding"); if (bld) bld.style.display = "none";
+  const cnt = el("graphCount"); if (cnt) cnt.textContent = `${GRAPH.nodes.length} notes · ${GRAPH.links.length} links`;
+  layoutAndDrawGraph();
+}
+// Force a fresh crawl of the vault, then swap in the rebuilt graph. The crawl is
+// slow (~60s), so show a subtle building state and poll the cached endpoint until
+// the server's building flag clears.
+async function rebuildGraph(){
+  const btn = el("graphRebuild");
+  if (!btn || btn.classList.contains("busy")) return;   // already rebuilding
+  btn.classList.add("busy"); btn.textContent = "building…";
+  try { await fetch(API("graph/rebuild"), { method: "POST" }); } catch(e){}
+  let tries = 0;
+  const done = () => { btn.classList.remove("busy"); btn.textContent = "rebuild"; };
+  const poll = async () => {
+    if (mode !== "tasks"){ done(); return; }   // user navigated away
+    let g;
+    try { g = await (await fetch(API("graph"))).json(); } catch(e){ done(); return; }
+    if (g.building && ++tries < 60){ setTimeout(poll, 3000); return; }   // ~3min cap
+    done();
+    if (g.nodes && g.nodes.length){
+      GRAPH = g;   // fresh nodes (no positions) -> layoutAndDrawGraph re-lays out
+      const cnt = el("graphCount"); if (cnt) cnt.textContent = `${GRAPH.nodes.length} notes · ${GRAPH.links.length} links`;
+      layoutAndDrawGraph();
+    }
+  };
+  setTimeout(poll, 1500);
+}
+function layoutAndDrawGraph(){
+  const canvas = el("graphCanvas"); if (!canvas || !GRAPH) return;
+  // Drop any window listeners from a previous redraw so they don't accumulate
+  // (the canvas element persists across selection changes / rebuilds).
+  if (canvas._gm) window.removeEventListener("mousemove", canvas._gm);
+  if (canvas._gu) window.removeEventListener("mouseup", canvas._gu);
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  const ctx = canvas.getContext("2d");
+  const N = GRAPH.nodes, L = GRAPH.links;
+  const idx = {}; N.forEach((n,i)=>{ idx[n.id]=i; if(n.x===undefined){ const a=Math.random()*6.283, r=Math.min(W,H)*0.35*Math.sqrt(Math.random()); n.x=W/2+r*Math.cos(a); n.y=H/2+r*Math.sin(a); n.vx=0; n.vy=0; } });
+  const edges = L.map(e=>[idx[e.source],idx[e.target]]).filter(([a,b])=>a!==undefined&&b!==undefined);
+  const nodeRadius = n => Math.max(2.2, Math.min(11, 2.2+Math.sqrt(n.val)*1.3));
+  // View transform (pan/zoom), persisted on GRAPH so it survives redraws but
+  // resets when the vault is rebuilt (a fresh GRAPH object). screen = ox + scale*world.
+  const view = GRAPH._view || (GRAPH._view = {ox:0, oy:0, scale:1});
+  const toWorld = (sx,sy) => [(sx-view.ox)/view.scale, (sy-view.oy)/view.scale];
+
+  // alpha cools the simulation to rest; re-heated on drag so the layout reacts.
+  let alpha = GRAPH._settled ? 0.02 : 0.4;
+  let drag = null, panning = null;
+  function step(){
+    for (let i=0;i<N.length;i++){ const a=N[i]; for (let j=i+1;j<N.length;j++){ const b=N[j];
+      let dx=a.x-b.x, dy=a.y-b.y; let d2=dx*dx+dy*dy+0.01; if (d2>90000) continue;
+      const f=280/d2; dx*=f; dy*=f; a.vx+=dx; a.vy+=dy; b.vx-=dx; b.vy-=dy; } }
+    for (const [a,b] of edges){ const na=N[a], nb=N[b]; let dx=nb.x-na.x, dy=nb.y-na.y; const d=Math.sqrt(dx*dx+dy*dy)||1; const f=(d-42)*0.015; dx=dx/d*f; dy=dy/d*f; na.vx+=dx; na.vy+=dy; nb.vx-=dx; nb.vy-=dy; }
+    for (const n of N){
+      if (n===drag) { n.vx=0; n.vy=0; continue; }  // dragged node follows the cursor, not physics
+      n.vx+=(W/2-n.x)*0.002; n.vy+=(H/2-n.y)*0.002;
+      n.x+=Math.max(-8,Math.min(8,n.vx))*alpha*2.5; n.y+=Math.max(-8,Math.min(8,n.vy))*alpha*2.5; n.vx*=0.82; n.vy*=0.82;
+    }
+  }
+  // Highlight the note matching the selected task (by name prefix).
+  const items = visibleTasks(); const selText = (items[taskSel]||{}).text || "";
+  const selNode = selText ? N.find(n => selText.toLowerCase().startsWith(n.label.toLowerCase().slice(0,18)) || n.label.toLowerCase().startsWith(selText.toLowerCase().slice(0,18))) : null;
+  let hoverNode = null;
+  function draw(){
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+    ctx.translate(view.ox, view.oy); ctx.scale(view.scale, view.scale);
+    ctx.strokeStyle="rgba(120,130,150,0.18)"; ctx.lineWidth=0.6/view.scale;
+    for (const [a,b] of edges){ ctx.beginPath(); ctx.moveTo(N[a].x,N[a].y); ctx.lineTo(N[b].x,N[b].y); ctx.stroke(); }
+    for (const n of N){ const r=nodeRadius(n);
+      ctx.beginPath(); ctx.arc(n.x,n.y,r,0,6.283);
+      ctx.fillStyle = (n===selNode)?"#f2b45f":(n===hoverNode)?"#a5b4fc":(n.val>20?"#5b53e0":n.val>6?"#818cf8":"#4a5568"); ctx.fill();
+      if (n.val>18 || n===selNode || n===hoverNode){ ctx.fillStyle="rgba(233,231,225,0.9)"; ctx.font=`${10/view.scale}px Inter, sans-serif`; ctx.fillText(n.label.slice(0,22), n.x+r+2, n.y+3); }
+    }
+  }
+  // A single always-on loop: cools the sim to rest, always redraws so pan/zoom/
+  // drag stay live. Stops when the graph leaves the DOM or Tasks is left.
+  cancelAnimationFrame(_graphAnim);
+  (function animate(){
+    if (!document.body.contains(canvas) || mode!=="tasks") { return; }
+    if (alpha > 0.008) { step(); alpha *= 0.985; } else if (!drag) { GRAPH._settled = true; }
+    draw();
+    _graphAnim = requestAnimationFrame(animate);
+  })();
+
+  const tip = el("graphTip");
+  const nodeAt = (sx,sy) => { const [wx,wy]=toWorld(sx,sy); let hit=null, best=Infinity;
+    for (const n of N){ const r=nodeRadius(n)+4; const d=(n.x-wx)**2+(n.y-wy)**2; if(d<r*r && d<best){best=d;hit=n;} } return hit; };
+  canvas.onmousedown = (ev)=>{ const rect=canvas.getBoundingClientRect(); const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+    const n = nodeAt(mx,my);
+    if (n){ drag=n; alpha=Math.max(alpha,0.3); GRAPH._settled=false; canvas.style.cursor="grabbing"; }
+    else { panning={x:ev.clientX, y:ev.clientY, ox:view.ox, oy:view.oy}; canvas.style.cursor="grabbing"; }
+    ev.preventDefault(); };
+  window.addEventListener("mousemove", canvas._gm = (ev)=>{
+    const rect=canvas.getBoundingClientRect(); const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+    if (drag){ const [wx,wy]=toWorld(mx,my); drag.x=wx; drag.y=wy; alpha=Math.max(alpha,0.2); return; }
+    if (panning){ view.ox=panning.ox+(ev.clientX-panning.x); view.oy=panning.oy+(ev.clientY-panning.y); return; }
+    if (mx<0||my<0||mx>W||my>H){ hoverNode=null; tip.style.display="none"; return; }
+    hoverNode = nodeAt(mx,my); canvas.style.cursor = hoverNode ? "pointer" : "grab";
+    if (hoverNode){ tip.style.display="block"; tip.style.left=Math.min(mx+12,W-tip.offsetWidth-8)+"px"; tip.style.top=(my+12)+"px"; tip.textContent=`${hoverNode.label}  ·  ${hoverNode.val} links`; }
+    else tip.style.display="none"; });
+  window.addEventListener("mouseup", canvas._gu = ()=>{ if(drag||panning){ drag=null; panning=null; canvas.style.cursor="grab"; } });
+  canvas.onwheel = (ev)=>{ ev.preventDefault(); const rect=canvas.getBoundingClientRect(); const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+    const [wx,wy]=toWorld(mx,my); const factor=Math.exp(-ev.deltaY*0.0015);
+    view.scale=Math.max(0.2, Math.min(5, view.scale*factor));
+    view.ox=mx-wx*view.scale; view.oy=my-wy*view.scale; };  // keep the point under the cursor fixed
+}
+
+/* ---------- Floating Ask agent ---------- */
+const CHAT_SUGGESTIONS = [
+  "What are my top priorities today?",
+  "Summarize my unread email.",
+  "Any GitHub PRs waiting on my review?",
+  "What should I not miss this week?",
+];
+function openAsk(){ el("askFloat").classList.add("on"); el("askFab").classList.add("hidden"); renderChatMsgs(); setTimeout(()=>{ const t=el("chatInput"); if(t) t.focus(); },0); }
+function closeAsk(){ el("askFloat").classList.remove("on"); el("askFab").classList.remove("hidden"); }
+function toggleAsk(){ el("askFloat").classList.contains("on") ? closeAsk() : openAsk(); }
+function renderChatMsgs(){
+  const m = el("chatMsgs"); if (!m) return;
+  if (!CHAT.length){
+    m.innerHTML = `<div class="chat-empty">Ask me anything, or tell me to look something up — I can read your email, chats, GitHub, calendar and tasks live to help you plan and draft. (I stay read-only; I won't send anything.)</div>
+      <div class="ask-suggest">${CHAT_SUGGESTIONS.map(q=>`<button class="ask-sug" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>`;
+    m.querySelectorAll(".ask-sug").forEach(b=>b.onclick=()=>{ el("chatInput").value=b.dataset.q; sendChat(); });
+    return;
+  }
+  m.innerHTML = CHAT.map(c => {
+    const body = c.role === "assistant" && !c._thinking
+      ? esc(c.content).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      : esc(c.content);
+    return `<div class="chat-b ${c.role}${c._thinking?' thinking':''}">${body}</div>`;
+  }).join("");
+  m.scrollTop = m.scrollHeight;
+}
+async function sendChat(){
+  const ta = el("chatInput"); if (!ta) return;
+  const q = ta.value.trim(); if (!q) return;
+  ta.value = ""; ta.style.height = "auto";
+  const history = CHAT.filter(c => !c._thinking).map(c => ({role: c.role, content: c.content}));
+  CHAT.push({role: "user", content: q});
+  const bubble = {role: "assistant", content: "Working on it… (reading your accounts live)", _thinking: true};
+  CHAT.push(bubble);
+  renderChatMsgs();
+  if (el("chatSend")) el("chatSend").disabled = true;
+  try {
+    const resp = await fetch(API("agent-stream"), {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question: q, history})});
+    const reader = resp.body.getReader(); const dec = new TextDecoder();
+    let acc = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      acc += dec.decode(value, {stream: true});
+      if (acc.trim()) { bubble.content = acc; bubble._thinking = false; renderChatMsgs(); }  // first token -> start typing
+    }
+    bubble.content = acc.trim() || "(no answer)"; bubble._thinking = false;
+  } catch(e){ bubble.content = "Sorry, something went wrong reaching the assistant."; bubble._thinking = false; }
+  if (el("chatSend")) el("chatSend").disabled = false;
+  renderChatMsgs();
+  if (el("chatInput")) el("chatInput").focus();
+}
+el("askFab").onclick = openAsk;
+el("askClose").onclick = closeAsk;
+el("chatSend").onclick = sendChat;
+(function(){ const ta = el("chatInput");
+  ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+  ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; });
+})();
+
+/* ---------- Keyboard ---------- */
+// Moving selection previews the message in the reader immediately (no Enter
+// needed) but does NOT mark it read -- Enter/click/`e` do that.
+function move(d){ const items=visible(); if(!items.length)return; sel=Math.max(0,Math.min(items.length-1,sel+d)); open(false); }
+
+// The inbox runs inside a workspace iframe; single-key shortcuts only reach us
+// if the iframe holds focus. Grab it on load and whenever the pointer enters.
+function grabFocus(){ try { window.focus(); if (document.activeElement !== el("search")) document.body.focus(); } catch(e){} }
+window.addEventListener("load", grabFocus);
+document.addEventListener("mouseenter", grabFocus);
+document.querySelector(".main").addEventListener("mousemove", grabFocus, {passive:true});
+
+document.addEventListener("keydown", (e) => {
+  if (el("paletteWrap").classList.contains("on")) return paletteKeys(e);
+  // Global shortcuts work everywhere, including from the search box.
+  if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k") { e.preventDefault(); openPalette(); return; }
+  if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="f") { e.preventDefault(); el("search").focus(); el("search").select(); return; }
+  if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="j") { e.preventDefault(); toggleAsk(); return; }
+  if (el("chatInput") && document.activeElement === el("chatInput")) {
+    if (e.key === "Escape") closeAsk();
+    return;  // typing in the Ask panel
+  }
+  const inSearch = document.activeElement === el("search");
+  if (inSearch) {
+    if (e.key === "Escape") { el("search").blur(); grabFocus(); }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;  // let real browser shortcuts through
+  if (e.key === "c") { setMode(mode==="calendar"?"mail":"calendar"); return; }  // quick toggle
+  if (e.key === "m") { setMode(mode==="messages"?"mail":"messages"); return; }  // toggle mail/messages
+  if (mode === "calendar") {
+    if (e.key === "ArrowRight" || e.key === "j" || e.key === "n") { e.preventDefault(); calAnchor.setDate(calAnchor.getDate() + (calView==='week'?7:3)); render(); }
+    else if (e.key === "ArrowLeft" || e.key === "k" || e.key === "p") { e.preventDefault(); calAnchor.setDate(calAnchor.getDate() - (calView==='week'?7:3)); render(); }
+    else if (e.key === "t") { calAnchor = new Date(); render(); }
+    else if (e.key === "w") { calView = "week"; render(); }
+    else if (e.key === "d") { calView = "3day"; render(); }
+    return;
+  }
+  if (mode === "luma") {
+    if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveLuma(1); }
+    else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveLuma(-1); }
+    else if (e.key === "Enter" || e.key === "o") { e.preventDefault(); openLuma(); }
+    else if (e.key === "/") { e.preventDefault(); el("search").focus(); }
+    else if (e.key === "Escape") { query=""; el("search").value=""; lumaSel=0; render(); }
+    return;
+  }
+  if (mode === "tasks") {
+    if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveTask(1); }
+    else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveTask(-1); }
+    else if (e.key === "/") { e.preventDefault(); el("search").focus(); }
+    else if (e.key === "Escape") { query=""; el("search").value=""; taskSel=0; render(); }
+    return;
+  }
+  if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); move(1); }
+  else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+  else if (e.key === "Enter" || e.key === "o") { e.preventDefault(); open(true); }
+  else if (e.key === "/") { e.preventDefault(); el("search").focus(); }
+  else if (e.key === "u") { unreadOnly=!unreadOnly; sel=0; render(); renderPills(); }
+  else if (e.key === "r") { doRefresh(); }
+  else if (e.key === "e") { const m=visible()[sel]; if(m){readState[m.id]=true; render(); renderPills();} }
+  else if (e.key === "Escape") { filterSrc="all"; unreadOnly=false; query=""; el("search").value=""; sel=0; render(); renderPills(); }
+}, true);
+el("search").addEventListener("input", (e)=>{ query=e.target.value; sel=0; evSel=0; lumaSel=0; taskSel=0; if (query.trim()!==deepQuery){ DEEP=[]; deepQuery=""; } render(); });
+el("refreshBtn").onclick = doRefresh;
+el("cmdBtn").onclick = openPalette;
+async function doRefresh(){ el("pulse").classList.add("on"); el("statusText").textContent="syncing…"; await fetch(API("refresh"),{method:"POST"}); setTimeout(pollStatus, 1500); }
+
+/* ---------- Command palette ---------- */
+let palSel = 0, palOpts = [];
+function modeForSource(source){ return (SOURCES[source]||{}).group === "Chat" ? "messages" : "mail"; }
+function jumpToMessage(id){
+  const m = MSGS.find(x => x.id === id);
+  setMode(m ? modeForSource(m.source) : "mail");
+  filterSrc = "all"; unreadOnly = false; query = ""; el("search").value = "";
+  const idx = visible().findIndex(x => x.id === id);
+  if (idx >= 0) { sel = idx; open(true); } else { render(); }
+}
+function buildOpts(){
+  const cmds = [
+    {label:"Go to Mail", act:()=>setMode("mail"), color:"#16161a"},
+    {label:"Go to Messages", act:()=>setMode("messages"), color:"#9333ea", hint:"m"},
+    {label:"Go to Calendar", act:()=>setMode("calendar"), color:"#16161a", hint:"c"},
+    {label:"Go to Luma SF", act:()=>setMode("luma"), color:"#e0533d"},
+    {label:"Go to Tasks", act:()=>setMode("tasks"), color:"#12a150"},
+    {label:"Ask the inbox agent", act:()=>openAsk(), color:"#5b53e0", hint:"⌘J"},
+    {label:"Unread only", act:()=>{unreadOnly=true;render();renderPills();}, color:"#5b53e0", hint:"u"},
+    {label:"Refresh now", act:doRefresh, color:"#12a150", hint:"r"},
+  ];
+  const srcs = Object.entries(SOURCES).map(([k,s])=>({label:"Account: "+s.label, act:()=>{setMode(modeForSource(k));filterSrc=k;render();renderPills();}, color:s.color, hint:s.short}));
+  // Discord-style: jump straight to any conversation / channel.
+  const convos = MSGS.filter(m=>m.kind==="chat").map(m=>{
+    const s = SOURCES[m.source];
+    const ctx = m.addr && m.addr.includes(" · ") ? m.addr.split(" · ")[0] : s.provider;
+    return {label:`${m.who}  ·  ${ctx}`, act:()=>jumpToMessage(m.id), color:s.color, hint:s.short};
+  });
+  return cmds.concat(srcs, convos);
+}
+function openPalette(){ palOpts=buildOpts(); palSel=0; el("paletteInput").value=""; renderPalette(""); el("paletteWrap").classList.add("on"); setTimeout(()=>el("paletteInput").focus(),0); }
+function closePalette(){ el("paletteWrap").classList.remove("on"); }
+function renderPalette(q){
+  let opts;
+  if (q.trim()) {
+    opts = palOpts.map(o=>({o, s:fuzzyScore(o.label, q)})).filter(x=>x.s>=0)
+                  .sort((a,b)=>b.s-a.s).map(x=>x.o).slice(0,50);
+  } else {
+    opts = palOpts.slice(0, 50);
+  }
+  el("paletteOpts").innerHTML = opts.map((o,i)=>`<div class="opt ${i===palSel?'on':''}" data-i="${i}"><span class="dot" style="background:${o.color}"></span>${esc(o.label)}${o.hint?`<span class="hint">${o.hint}</span>`:''}</div>`).join("");
+  window._palFiltered = opts;
+  el("paletteOpts").querySelectorAll(".opt").forEach(d=>d.onclick=()=>runOpt(+d.dataset.i));
+}
+function runOpt(i){ const o=window._palFiltered[i]; if(!o)return; closePalette(); o.act(); sel=0; render(); renderPills(); }
+el("paletteInput").addEventListener("input", e=>{ palSel=0; renderPalette(e.target.value); });
+function paletteKeys(e){
+  if (e.key==="Escape"){ closePalette(); }
+  else if (e.key==="ArrowDown"){ e.preventDefault(); palSel=Math.min((window._palFiltered.length||1)-1,palSel+1); renderPalette(el("paletteInput").value); }
+  else if (e.key==="ArrowUp"){ e.preventDefault(); palSel=Math.max(0,palSel-1); renderPalette(el("paletteInput").value); }
+  else if (e.key==="Enter"){ e.preventDefault(); runOpt(palSel); }
+}
+el("paletteWrap").onclick = (e)=>{ if(e.target===el("paletteWrap")) closePalette(); };
+
+load();
+</script>
+</body>
+</html>

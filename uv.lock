@@ -35,6 +35,7 @@ members = [
     "oom-priority",
     "system-interface",
     "tk-command-parsing",
+    "unified-inbox",
 ]
 overrides = [{ name = "openai", specifier = ">=2.20.0" }]
 
@@ -994,6 +995,7 @@ dependencies = [
     { name = "playwright" },
     { name = "tk-command-parsing" },
     { name = "tomlkit" },
+    { name = "unified-inbox" },
 ]
 
 [package.dev-dependencies]
@@ -1024,6 +1026,7 @@ requires-dist = [
     { name = "playwright", specifier = "==1.58.0" },
     { name = "tk-command-parsing", editable = "libs/tk_command_parsing" },
     { name = "tomlkit", specifier = ">=0.12" },
+    { name = "unified-inbox", editable = "libs/unified_inbox" },
 ]
 
 [package.metadata.requires-dev]
@@ -2971,6 +2974,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/20/e5/16ff212c1e452235a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl", hash = "sha256:4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35", size = 13993, upload-time = "2020-12-28T15:15:28.35Z" },
 ]
+
+[[package]]
+name = "pyaes"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/66/2c17bae31c906613795711fc78045c285048168919ace2220daa372c7d72/pyaes-1.6.1.tar.gz", hash = "sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f", size = 28536, upload-time = "2017-09-20T21:17:54.23Z" }
 
 [[package]]
 name = "pyasn1"
@@ -6693,6 +6702,19 @@ wheels = [
 ]
 
 [[package]]
+name = "telethon"
+version = "1.44.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyaes" },
+    { name = "rsa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/e2/d4137e598db0ba50e4cf9bf32f2e26d016b2c4bb0e9763e3d5a07007d780/telethon-1.44.0.tar.gz", hash = "sha256:7de1473e9e412e20bd57b102d8f50d48372712462be9ff6c003bb81c50ad7e98", size = 701463, upload-time = "2026-06-15T15:47:39.44Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/fd/4ad621d7a4b8655dfc964ee1c1267407496ec6fd10c91901a64ea29c16c8/telethon-1.44.0-py3-none-any.whl", hash = "sha256:52fc49efb67a4916c2aedcb295ad286f4afa2aba9bf15d83ed2acdc64af0c718", size = 789786, upload-time = "2026-06-15T15:47:41.534Z" },
+]
+
+[[package]]
 name = "tenacity"
 version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -6910,6 +6932,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ba/19/1b9b0e29f30c6d35cb345486df41110984ea67ae69dddbc0e8a100999493/tzdata-2026.2.tar.gz", hash = "sha256:9173fde7d80d9018e02a662e168e5a2d04f87c41ea174b139fbef642eda62d10", size = 198254, upload-time = "2026-04-24T15:22:08.651Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ce/e4/dccd7f47c4b64213ac01ef921a1337ee6e30e8c6466046018326977efd95/tzdata-2026.2-py2.py3-none-any.whl", hash = "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7", size = 349321, upload-time = "2026-04-24T15:22:05.876Z" },
+]
+
+[[package]]
+name = "unified-inbox"
+version = "0.1.0"
+source = { editable = "libs/unified_inbox" }
+dependencies = [
+    { name = "flask" },
+    { name = "flask-sock" },
+    { name = "litellm" },
+    { name = "telethon" },
+    { name = "werkzeug" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "flask", specifier = ">=3.0" },
+    { name = "flask-sock", specifier = ">=0.7" },
+    { name = "litellm", specifier = ">=1.0" },
+    { name = "telethon", specifier = ">=1.40" },
+    { name = "werkzeug", specifier = ">=3.0" },
 ]
 
 [[package]]
