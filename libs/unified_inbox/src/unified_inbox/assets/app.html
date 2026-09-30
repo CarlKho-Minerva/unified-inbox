@@ -407,7 +407,8 @@ body { font-size: 14px; letter-spacing: -0.01em; background: var(--bg); }
     <span class="sc"><kbd>j</kbd><kbd>k</kbd><kbd>↑</kbd><kbd>↓</kbd> <b>move & preview</b></span>
     <span class="sc"><kbd>enter</kbd> <b>mark read</b></span>
     <span class="sc"><kbd>u</kbd> <b>unread only</b></span>
-    <span class="sc"><kbd>e</kbd> <b>done</b></span>
+    <span class="sc"><kbd>e</kbd> <b>archive</b></span>
+    <span class="sc"><kbd>z</kbd> <b>undo</b></span>
     <span class="sc"><kbd>x</kbd> <b>doesn't need me</b></span>
     <span class="sc"><kbd>n</kbd> <b>needs me</b></span>
     <span class="sc"><kbd>/</kbd> <b>search</b></span>
@@ -517,13 +518,44 @@ function pChip(id) {
   const p = PSCORE[id]; if (p == null) return "";
   return `<span class="pchip" title="AnyJev: probability this needs you (preview, does not move mail yet)">AnyJev ${p.toFixed(2)}</span>`;
 }
-// Done: out of Needs you now and after reload (server remembers), stays greyed in All mail.
-function markDone(m) {
-  readState[m.id] = true; LANE[m.id] = "done"; WHY[m.id] = "done";
-  signal(m.id, "done");
+// e = archive. Email leaves every view here AND the real inbox (Gmail All Mail /
+// Zoho Archive; nothing deleted). Chat has no archive, so it is marked done.
+// z = undo the last archive. Failures are shown, never swallowed.
+let LAST_ARCHIVED = null;
+function flash(text, bad) {
+  const e = el("statusText"); if (!e) return;
+  e.textContent = text; e.style.color = bad ? "#c50000" : "";
+  clearTimeout(flash._t); flash._t = setTimeout(() => { e.style.color = ""; updateStatus(); }, bad ? 6000 : 2500);
+}
+async function markDone(m) {
   const row = el("list").querySelector(".row.sel");
-  const finish = () => { render(); renderPills(); if (visible()[sel]) open(false); };
-  if (row && filterSrc === "needs") { row.classList.add("leaving"); setTimeout(finish, 180); } else finish();
+  if (row) row.classList.add("leaving");
+  if (m.kind !== "email") {
+    readState[m.id] = true; LANE[m.id] = "done"; signal(m.id, "done");
+    setTimeout(() => { render(); renderPills(); }, 180); return;
+  }
+  const prev = MSGS;
+  MSGS = MSGS.filter(x => x.id !== m.id);          // optimistic: gone now
+  setTimeout(() => { render(); renderPills(); if (visible()[sel]) open(false); }, 180);
+  try {
+    const r = await fetch(API("archive"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id }) });
+    const d = await r.json().catch(() => ({ error: "server error " + r.status }));
+    if (!r.ok) throw new Error(d.error || r.status);
+    LAST_ARCHIVED = m; flash("archived · z to undo");
+  } catch (err) {
+    MSGS = prev; render(); renderPills();          // put it back and say why
+    flash("archive failed: " + err.message, true);
+  }
+}
+async function undoArchive() {
+  const m = LAST_ARCHIVED; if (!m) { flash("nothing to undo"); return; }
+  try {
+    const r = await fetch(API("archive"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, undo: true }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    LAST_ARCHIVED = null; MSGS = [m, ...MSGS].sort((a, b) => b.ts - a.ts); delete LANE[m.id];
+    await loadTriage(); render(); renderPills(); flash("restored to inbox");
+  } catch (err) { flash("undo failed: " + err.message, true); }
 }
 function moveLane(id, lane) { LANE[id] = lane; WHY[id] = "you moved it"; signal(id, "move", lane); render(); renderPills(); }
 async function loadEvents() {
@@ -554,6 +586,7 @@ async function pollStatus() {
   if (changed) await refreshData();
 }
 function updateStatus() {
+  if (flash._t && el("statusText").style.color) return;  // an error message is showing; let it be read
   el("pulse").classList.toggle("on", !!META.refreshing);
   const t = META.last_refresh ? relTime(META.last_refresh) : "—";
   el("statusText").textContent = META.refreshing ? "syncing…" : `synced ${t} ago`;
@@ -683,7 +716,7 @@ function renderInbox() {
         </div>
         <div class="subj">${esc(m.subject)}</div>
         <div class="snip">${esc(m.snippet)}</div>
-        <div class="why">${LANE[m.id]==="act"?`<button data-mv="done">done</button><button data-mv="later">doesn't need me</button>`:`<button data-mv="act">needs me</button>`}<span>${esc(WHY[m.id]||"")}</span>${pChip(m.id)}</div>
+        <div class="why">${LANE[m.id]==="act"?`<button data-mv="done">archive</button><button data-mv="later">doesn't need me</button>`:`<button data-mv="act">needs me</button>`}<span>${esc(WHY[m.id]||"")}</span>${pChip(m.id)}</div>
       </div>
       <div class="meta"><span class="time mono">${relTime(m.ts)}</span><span class="udot"></span></div>
     </div>`;
@@ -1354,6 +1387,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "u") { unreadOnly=!unreadOnly; sel=0; render(); renderPills(); }
   else if (e.key === "r") { doRefresh(); }
   else if (e.key === "e") { const m=visible()[sel]; if(m) markDone(m); }
+  else if (e.key === "z") { undoArchive(); }
   else if (e.key === "x") { const m=visible()[sel]; if(m) moveLane(m.id, "later"); }
   else if (e.key === "n") { const m=visible()[sel]; if(m) moveLane(m.id, "act"); }
   else if (e.key === "Escape") { filterSrc="all"; unreadOnly=false; query=""; el("search").value=""; sel=0; render(); renderPills(); }

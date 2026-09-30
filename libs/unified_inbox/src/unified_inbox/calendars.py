@@ -80,11 +80,15 @@ def _normalize_google_event(cid: str, name: str, color: str, e: dict) -> dict:
     }
 
 
+class CalendarUnavailableError(Exception):
+    """A calendar source that should have data could not provide it (auth, stale push)."""
+
+
 def fetch_google_events(get_json: JsonFetcher = _lk_json) -> list[dict]:
     cal_list = get_json("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50")
     if isinstance(cal_list, dict) and cal_list.get("error"):
         # Loud, not an empty calendar: surfaces in meta.sources and the Focus footer.
-        raise RuntimeError(str(cal_list["error"]).splitlines()[0])
+        raise CalendarUnavailableError(str(cal_list["error"]).splitlines()[0])
     if not isinstance(cal_list, dict) or "items" not in cal_list:
         return []
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -189,7 +193,7 @@ def fetch_pushed_events(path: Path = PUSHED_EVENTS, now: float | None = None) ->
     blob = json.loads(path.read_text())
     age = (now if now is not None else time.time()) - blob["pushed_at"]
     if age > PUSH_STALE_SECONDS:
-        raise RuntimeError(f"calendar push is {int(age // 60)} min old")
+        raise CalendarUnavailableError(f"calendar push is {int(age // 60)} min old")
     return blob["events"]
 
 
@@ -202,7 +206,7 @@ def fetch_all_events() -> tuple[list[dict], dict]:
             pushed = fetch_pushed_events()
             events.extend(pushed)
             status["pushed_calendar"] = {"ok": True, "count": len(pushed)}
-        except Exception as exc:  # noqa: BLE001 - record and continue
+        except (CalendarUnavailableError, OSError, ValueError, KeyError) as exc:
             status["pushed_calendar"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     for key, fn in [("google_calendar", fetch_google_events), ("zoho_calendar", fetch_zoho_events)]:
         try:

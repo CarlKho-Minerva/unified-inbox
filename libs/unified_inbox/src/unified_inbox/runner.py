@@ -36,6 +36,7 @@ from unified_inbox.search import search_all
 from unified_inbox.sources import SOURCES
 from unified_inbox.store import Store
 from unified_inbox.telegram import download_telegram_media
+from unified_inbox.archive import ArchiveError, set_archived
 from unified_inbox.triage import LANES, Triage
 
 DATA_DIR = Path(os.environ.get("UNIFIED_INBOX_DATA_DIR", "runtime/unified-inbox"))
@@ -183,12 +184,42 @@ def api_signal() -> Response:
     # Behaviour log: every open / hover-dwell / move / done is training data.
     body = request.get_json(silent=True) or {}
     mid, action, lane = body.get("id", ""), body.get("action", ""), body.get("lane")
-    if not mid or action not in ("open", "dwell", "move", "done", "reply", "snooze"):
+    if not mid or action not in ("open", "dwell", "move", "done", "reply", "snooze", "archive", "unarchive"):
         return jsonify({"error": "id and a known action are required"}), 400
     if lane is not None and lane not in LANES:
         return jsonify({"error": f"lane must be one of {LANES}"}), 400
     msg = next((m for m in store.get_messages() if m["id"] == mid), None)
     triage.record(msg, mid, action, lane)
+    return jsonify({"ok": True})
+
+
+_archive_lock = threading.Lock()
+
+
+@app.route("/api/archive", methods=["POST"])
+def api_archive() -> Response | tuple[Response, int]:
+    """Archive (or with undo=true, restore) one email in its real mailbox, then
+    update the cache so it disappears (or returns) immediately. Never deletes."""
+    body = request.get_json(silent=True) or {}
+    mid, undo = body.get("id", ""), bool(body.get("undo"))
+    with _archive_lock:
+        parked = store.get_archived()
+        msg = parked.get(mid) if undo else next((m for m in store.get_messages() if m["id"] == mid), None)
+        if msg is None:
+            return jsonify({"error": "not found"}), 404
+        try:
+            set_archived(msg, archived=not undo)
+        except ArchiveError as e:
+            return jsonify({"error": str(e)}), 409
+        msgs = [m for m in store.get_messages() if m["id"] != mid]
+        if undo:
+            parked.pop(mid, None)
+            msgs = sorted(msgs + [msg], key=lambda m: -m.get("ts", 0))
+        else:
+            parked[mid] = msg
+        store.set_messages(msgs)
+        store.set_archived(parked)
+    triage.record(msg, mid, "unarchive" if undo else "archive")
     return jsonify({"ok": True})
 
 

@@ -1,6 +1,11 @@
 import datetime
+import json
+
+import pytest
 
 from unified_inbox.calendars import (
+    CalendarUnavailableError,
+    fetch_pushed_events,
     _ics_field,
     _normalize_google_event,
     _parse_zoho_ics,
@@ -111,14 +116,8 @@ def test_normalize_google_event_all_day_and_missing_fields() -> None:
 
 
 def test_pushed_events_fresh_and_stale(tmp_path) -> None:
-    import json as _json
-
-    import pytest
-
-    from unified_inbox.calendars import fetch_pushed_events
-
     p = tmp_path / "pushed_events.json"
-    p.write_text(_json.dumps({"pushed_at": 1000.0, "events": [{"title": "x", "start": 2000.0}]}))
+    p.write_text(json.dumps({"pushed_at": 1000.0, "events": [{"title": "x", "start": 2000.0}]}))
     assert fetch_pushed_events(p, now=1100.0)[0]["title"] == "x"
-    with pytest.raises(RuntimeError, match="min old"):
+    with pytest.raises(CalendarUnavailableError, match="min old"):
         fetch_pushed_events(p, now=1000.0 + 7200)

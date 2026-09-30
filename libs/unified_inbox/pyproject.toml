@@ -10,6 +10,8 @@ dependencies = [
     "werkzeug>=3.0",
     "litellm>=1.0",
     "telethon>=1.40",
+    "anyjev>=0.0.2",
+    "transformers>=4.40",
 ]
 
 [project.scripts]

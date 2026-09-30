@@ -201,6 +201,9 @@ def _imap_normalize(key: str, uid: str, msg: email.message.Message, flags: tuple
         "url": "https://mail.zoho.com/" if key == "zoho" else "https://mail.google.com/",
         "native_id": uid,
         "channel_id": None,
+        # Sequence numbers (native_id) shift when mail leaves the inbox; archive
+        # finds the message by this stable header instead.
+        "message_id": (msg.get("Message-ID") or "").strip(),
     }
 
 

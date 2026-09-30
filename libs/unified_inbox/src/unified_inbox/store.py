@@ -70,6 +70,13 @@ class Store:
     def set_meta(self, meta: dict) -> None:
         self._write(self.meta_path, meta)
 
+    def get_archived(self) -> dict:
+        """Messages archived from this app, kept so undo can restore them."""
+        return self._read(self.dir / "archived.json", {})
+
+    def set_archived(self, archived: dict) -> None:
+        self._write(self.dir / "archived.json", archived)
+
     def get_seen(self) -> dict:
         return self._read(self.seen_path, {})
 

@@ -27,6 +27,9 @@ import threading
 import time
 from pathlib import Path
 
+from anyjev import Decider, Question
+from anyjev.backends.vllm import VLLMBackend
+
 LANES = ("act", "upcoming", "later")
 
 # Admin systems asking you to DO something. Beats every other rule: this is the
@@ -128,8 +131,6 @@ def deadline_hint(m: dict) -> str | None:
 
 
 def _needs_action_question():
-    from anyjev import Question  # type: ignore[import-not-found]
-
     return Question.noul(
         "Does this email need an action from the recipient: a reply to a person, a form, a submission, "
         "an approval, a payment, or a deadline? Event invites, receipts, codes and newsletters that only inform do not.",
@@ -179,11 +180,15 @@ class Triage:
             self.dir.mkdir(parents=True, exist_ok=True)
             with self.signals_path.open("a") as f:
                 f.write(json.dumps(row) + "\n")
-            if action == "done":
+            if action in ("done", "archive"):
                 # Done = handled: it leaves Needs you for good (still visible under All mail).
                 ov = self.overrides()
                 ov[mid] = "done"
                 self._write(self.overrides_path, ov)
+            if action == "unarchive":
+                ov = self.overrides()
+                if ov.pop(mid, None) is not None:
+                    self._write(self.overrides_path, ov)
             if action == "move" and lane in LANES:
                 ov = self.overrides()
                 ov[mid] = lane
@@ -206,12 +211,6 @@ class Triage:
         Failures are recorded and surfaced in /api/triage, never swallowed."""
         if not self.anyjev_url:
             return
-        try:
-            from anyjev import Decider, Question  # type: ignore[import-not-found]
-            from anyjev.backends.vllm import VLLMBackend  # type: ignore[import-not-found]
-        except ImportError:
-            self.anyjev_error = "anyjev not installed (pip install anyjev)"
-            return
         scores = self._read(self.scores_path, {})
         todo = [m for m in messages if m.get("kind") == "email" and m["id"] not in scores][:64]
         if not todo:
@@ -232,7 +231,7 @@ class Triage:
             for m, dc in zip(todo, self._decider.decide_batch(states, _needs_action_question())):
                 scores[m["id"]] = float(dc.probs[0])
             self.anyjev_error = None
-        except Exception as e:  # surfaced in the page footer, never swallowed
+        except (OSError, ValueError, KeyError, RuntimeError, TimeoutError) as e:  # shown in the footer
             self.anyjev_error = f"{type(e).__name__}: {e}"[:200]
         self._write(self.scores_path, scores)
 
@@ -255,7 +254,7 @@ class Triage:
             sender_lane = senders.get((m.get("addr") or "").lower())
             if sender_lane and why != "asks for an action":
                 lane, why = sender_lane, "you moved this sender"
-            if ov.get(m["id"]) == "done":
+            if ov.get(m["id"]) == "done":  # also set by archive
                 continue
             if m["id"] in ov:
                 lane, why = ov[m["id"]], "you moved it"
