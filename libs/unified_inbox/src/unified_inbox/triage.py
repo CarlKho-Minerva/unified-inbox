@@ -120,6 +120,16 @@ def deadline_hint(m: dict) -> str | None:
     return hit.group(2) if hit else None
 
 
+def _needs_action_question():
+    from anyjev import Question  # type: ignore[import-not-found]
+
+    return Question.noul(
+        "Does this email need an action from the recipient: a reply to a person, a form, a submission, "
+        "an approval, a payment, or a deadline? Event invites, receipts, codes and newsletters that only inform do not.",
+        name="needs_action",
+    )
+
+
 class Triage:
     """Rules + your overrides + optional AnyJev preview. Thread-safe enough for Flask."""
 
@@ -131,6 +141,8 @@ class Triage:
         self._lock = threading.Lock()
         self.anyjev_url = os.environ.get("UNIFIED_INBOX_ANYJEV_URL", "").strip()
         self.anyjev_error: str | None = None
+        self._decider = None
+        self.anyjev_trusted = os.environ.get("UNIFIED_INBOX_ANYJEV_TRUST") == "1"
 
     # ---- persistence ----
     def _read(self, path: Path, default):
@@ -183,31 +195,33 @@ class Triage:
         if not self.anyjev_url:
             return
         try:
-            from anyjev import Decider, Question, VLLMBackend  # type: ignore[import-not-found]
+            from anyjev import Decider, Question  # type: ignore[import-not-found]
+            from anyjev.backends.vllm import VLLMBackend  # type: ignore[import-not-found]
         except ImportError:
             self.anyjev_error = "anyjev not installed (pip install anyjev)"
             return
         scores = self._read(self.scores_path, {})
-        todo = [m for m in messages if m.get("kind") == "email" and m["id"] not in scores][:40]
+        todo = [m for m in messages if m.get("kind") == "email" and m["id"] not in scores][:64]
         if not todo:
             return
         try:
-            backend = VLLMBackend(
-                self.anyjev_url,
-                os.environ.get("UNIFIED_INBOX_ANYJEV_MODEL", "gemma-4-31b-it"),
-                tokenizer_name=os.environ.get("UNIFIED_INBOX_ANYJEV_TOKENIZER", "QuantTrio/gemma-4-31B-it-AWQ"),
-            )
-            decider = Decider(backend, level="L0")
-            q = Question.noul(
-                "Does this email need an action from the recipient (a reply, a form, a submission, "
-                "an approval, a payment, a deadline)? Events, receipts and newsletters that only inform do not."
-            )
-            for m in todo:
-                state = f"From: {m.get('who')} <{m.get('addr')}>\nSubject: {m.get('subject')}\n{m.get('snippet')}"
-                scores[m["id"]] = float(decider.decide(q, state).probability)
+            if self._decider is None:
+                backend = VLLMBackend(
+                    self.anyjev_url,
+                    os.environ.get("UNIFIED_INBOX_ANYJEV_MODEL", "gemma-4-31b-it"),
+                    tokenizer_name=os.environ.get("UNIFIED_INBOX_ANYJEV_TOKENIZER", "QuantTrio/gemma-4-31B-it-AWQ"),
+                    workers=8,
+                )
+                self._decider = Decider(backend, level="L0")
+            states = [
+                {"from": f"{m.get('who')} <{m.get('addr')}>", "subject": m.get("subject"), "preview": m.get("snippet")}
+                for m in todo
+            ]
+            for m, dc in zip(todo, self._decider.decide_batch(states, _needs_action_question())):
+                scores[m["id"]] = float(dc.probs[0])
             self.anyjev_error = None
-        except Exception as e:  # surfaced, not swallowed
-            self.anyjev_error = f"{type(e).__name__}: {e}"
+        except Exception as e:  # surfaced in the page footer, never swallowed
+            self.anyjev_error = f"{type(e).__name__}: {e}"[:200]
         self._write(self.scores_path, scores)
 
     # ---- the view ----
@@ -219,9 +233,12 @@ class Triage:
         for m in messages:
             lane, why = rule_lane(m)
             p = scores.get(m["id"])
-            if p is not None and p >= 0.85 and lane != "act":
+            # Zero-shot L0 scores saturate (a GPU promo scored 0.99, a real reply
+            # 0.00 on 2026-09-29), so the model only moves mail once trusted,
+            # i.e. after an L2 head is fit on signals.jsonl.
+            if self.anyjev_trusted and p is not None and p >= 0.85 and lane != "act":
                 lane, why = "act", f"model {p:.2f}"
-            elif p is not None and p <= 0.15 and why == "from a person":
+            elif self.anyjev_trusted and p is not None and p <= 0.15 and why == "from a person":
                 lane, why = "later", f"model {p:.2f}"
             sender_lane = senders.get((m.get("addr") or "").lower())
             if sender_lane and why != "asks for an action":
