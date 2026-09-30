@@ -355,6 +355,7 @@ body { font-size: 14px; letter-spacing: -0.01em; background: var(--bg); }
 .row.sel .why { max-height: 20px; opacity: 1; }
 .why button { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-3); cursor: pointer; }
 .why button:hover { color: var(--ink); }
+.pchip { color: #2b6cb0; }
 .reader > * { animation: calmIn .22s var(--ease); }
 @keyframes calmIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .rd-head { padding: 30px 36px 18px; border-bottom: 0; }
@@ -411,6 +412,7 @@ body { font-size: 14px; letter-spacing: -0.01em; background: var(--bg); }
     <span class="sc"><kbd>/</kbd> <b>search</b></span>
     <span class="sc"><kbd>r</kbd> <b>refresh</b></span>
     <span class="sc"><kbd>⌘K</kbd> <b>commands</b></span>
+    <span class="sc" id="modelStatus" style="margin-left:auto;font-family:var(--mono);font-size:10.5px"></span>
   </div>
 
   <button class="ask-fab" id="askFab" title="Ask your inbox agent (Cmd-J)">
@@ -452,7 +454,7 @@ let LUMA = [], lumaSel = 0;
 let TASKS = [], taskSel = 0;
 let CHAT = [];  // {role, content} turns in the Ask panel
 let readState = {};  // client-side read marking
-let LANE = {}, WHY = {}, PREVIEW = null;  // triage lane per message id (from /api/triage)
+let LANE = {}, WHY = {}, PSCORE = {}, PREVIEW = null;  // triage lane per message id (from /api/triage)
 const detailCache = {};  // id -> fetched detail (prefetched for instant reads)
 const CHAT_TTL = 45000;  // chat threads change; re-fetch cached ones after this
 
@@ -492,15 +494,27 @@ async function refreshData() {
 async function loadTriage() {
   try {
     const t = await (await fetch(API("triage"))).json();
-    LANE = {}; WHY = {};
-    for (const [lane, xs] of Object.entries(t.lanes)) for (const m of xs) { LANE[m.id] = lane; WHY[m.id] = m.why; }
-    PREVIEW = t.preview;
+    LANE = {}; WHY = {}; PSCORE = {};
+    for (const [lane, xs] of Object.entries(t.lanes)) for (const m of xs) { LANE[m.id] = lane; WHY[m.id] = m.why; if (m.p != null) PSCORE[m.id] = m.p; }
+    PREVIEW = t.preview; renderModelStatus();
   } catch (e) { /* triage is additive; the inbox still works without it */ }
 }
 // Every choice is a training signal (open, dwell, done, move). See triage.py.
 function signal(id, action, lane) {
   fetch(API("signal"), { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, action, lane }) }).catch(() => {});
+}
+// AnyJev status: preview only (scores shown, lanes unchanged) until the personal head is fit.
+function renderModelStatus() {
+  const e = el("modelStatus"); if (!e || !PREVIEW) return;
+  if (PREVIEW.anyjev_error) { e.innerHTML = `<span style="color:#c50000">AnyJev: ${esc(PREVIEW.anyjev_error)}</span>`; return; }
+  e.textContent = PREVIEW.anyjev
+    ? `AnyJev preview on · ${Object.keys(PSCORE).length} scored · ${PREVIEW.signals}/${PREVIEW.fit_after} choices to your model`
+    : `AnyJev off · ${PREVIEW.signals} choices logged`;
+}
+function pChip(id) {
+  const p = PSCORE[id]; if (p == null) return "";
+  return `<span class="pchip" title="AnyJev: probability this needs you (preview, does not move mail yet)">AnyJev ${p.toFixed(2)}</span>`;
 }
 function moveLane(id, lane) { LANE[id] = lane; WHY[id] = "you moved it"; signal(id, "move", lane); render(); renderPills(); }
 async function loadEvents() {
@@ -660,7 +674,7 @@ function renderInbox() {
         </div>
         <div class="subj">${esc(m.subject)}</div>
         <div class="snip">${esc(m.snippet)}</div>
-        <div class="why">${LANE[m.id]==="act"?`<button data-mv="later">not for me</button>`:`<button data-mv="act">needs me</button>`}<span>${esc(WHY[m.id]||"")}</span></div>
+        <div class="why">${LANE[m.id]==="act"?`<button data-mv="later">not for me</button>`:`<button data-mv="act">needs me</button>`}<span>${esc(WHY[m.id]||"")}</span>${pChip(m.id)}</div>
       </div>
       <div class="meta"><span class="time mono">${relTime(m.ts)}</span><span class="udot"></span></div>
     </div>`;
@@ -750,6 +764,7 @@ async function open(markRead = true) {
         <div class="rd-av" style="background:${s.color}">${initials(m.who)}</div>
         <div><div class="rd-name">${esc(m.who)}</div><div class="rd-addr">${esc(m.addr||'')}</div></div>
         <div class="rd-actions">
+          ${PSCORE[m.id]!=null?`<span class="icon-btn" title="AnyJev preview score" style="cursor:default">AnyJev ${PSCORE[m.id].toFixed(2)}</span>`:""}
           <a class="icon-btn" href="${m.url}" target="_blank" rel="noopener">Open in ${s.provider}</a>
         </div>
       </div>
