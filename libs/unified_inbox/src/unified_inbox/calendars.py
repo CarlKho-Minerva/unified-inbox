@@ -81,6 +81,9 @@ def _normalize_google_event(cid: str, name: str, color: str, e: dict) -> dict:
 
 def fetch_google_events(get_json: JsonFetcher = _lk_json) -> list[dict]:
     cal_list = get_json("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50")
+    if isinstance(cal_list, dict) and cal_list.get("error"):
+        # Loud, not an empty calendar: surfaces in meta.sources and the Focus footer.
+        raise RuntimeError(str(cal_list["error"]).splitlines()[0])
     if not isinstance(cal_list, dict) or "items" not in cal_list:
         return []
     now = datetime.datetime.now(datetime.timezone.utc)

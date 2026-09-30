@@ -119,8 +119,10 @@ function signal(id, action, lane) {
 function saveDone() { try { localStorage.setItem("focus.done", JSON.stringify([...done].slice(-2000))); } catch (e) {} }
 
 function actItems() {
-  const xs = DATA.lanes.act.filter(m => !done.has(m.id));
-  xs.sort((a, b) => (b.due ? 1 : 0) - (a.due ? 1 : 0) || b.ts - a.ts);
+  // Recent first; a month-old thread is not "needs you" anymore (it is in the count below).
+  const cutoff = Date.now() / 1000 - 21 * 86400;
+  const xs = DATA.lanes.act.filter(m => !done.has(m.id) && (m.ts || 0) >= cutoff);
+  xs.sort((a, b) => b.ts - a.ts);
   return xs;
 }
 function laterItems() { return DATA.lanes.later.filter(m => !done.has(m.id)); }
@@ -167,7 +169,9 @@ function render() {
   $("later").innerHTML = later.slice(0, 60).map((m, i) => itemHtml(m, i, "later")).join("");
 
   const pv = DATA.preview;
-  $("learn").innerHTML = pv.anyjev_error ? `<span class="err">model: ${esc(pv.anyjev_error)}</span>`
+  const broken = Object.entries((DATA.meta || {}).sources || {}).filter(([k, v]) => v && v.ok === false);
+  $("learn").innerHTML = broken.length ? `<span class="err">${broken.map(([k, v]) => esc(k.replace("_", " ")) + ": " + esc(v.error)).join(" · ")}</span>`
+    : pv.anyjev_error ? `<span class="err">model: ${esc(pv.anyjev_error)}</span>`
     : `learning from ${pv.signals} actions${pv.anyjev ? " · model preview on" : ""}`;
 }
 
