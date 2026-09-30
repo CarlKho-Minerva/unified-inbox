@@ -7,6 +7,7 @@ Calendar (via CalDAV with the stored app password), normalized into one shape:
 import base64
 import datetime
 import json
+import os
 import re
 import subprocess
 import time
@@ -178,16 +179,38 @@ def fetch_zoho_events() -> list[dict]:
     return _parse_zoho_ics(body)
 
 
+PUSHED_EVENTS = Path(os.environ.get("UNIFIED_INBOX_DATA_DIR", "data/.apps/unified-inbox")) / "pushed_events.json"
+PUSH_STALE_SECONDS = 3600
+
+
+def fetch_pushed_events(path: Path = PUSHED_EVENTS, now: float | None = None) -> list[dict]:
+    """Events a trusted machine pushed in (the Mac's inbox_calendar_push.py). Raises
+    when the push has gone stale so the page says so instead of showing a clear week."""
+    blob = json.loads(path.read_text())
+    age = (now if now is not None else time.time()) - blob["pushed_at"]
+    if age > PUSH_STALE_SECONDS:
+        raise RuntimeError(f"calendar push is {int(age // 60)} min old")
+    return blob["events"]
+
+
 def fetch_all_events() -> tuple[list[dict], dict]:
     """Fetch both calendars, merge, sort by start. Returns (events, status)."""
     status = {}
     events = []
+    if PUSHED_EVENTS.exists():
+        try:
+            pushed = fetch_pushed_events()
+            events.extend(pushed)
+            status["pushed_calendar"] = {"ok": True, "count": len(pushed)}
+        except Exception as exc:  # noqa: BLE001 - record and continue
+            status["pushed_calendar"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     for key, fn in [("google_calendar", fetch_google_events), ("zoho_calendar", fetch_zoho_events)]:
         try:
             evs = fn()
             events.extend(evs)
             status[key] = {"ok": True, "count": len(evs)}
         except Exception as exc:  # noqa: BLE001 - record and continue
-            status[key] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            covered = key == "google_calendar" and status.get("pushed_calendar", {}).get("ok")
+            status[key] = {"ok": bool(covered), "error": f"{type(exc).__name__}: {exc}", "covered_by_push": bool(covered)}
     events.sort(key=lambda e: e.get("start", 0))
     return events, status
