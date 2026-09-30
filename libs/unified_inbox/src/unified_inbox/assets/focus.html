@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Focus</title>
+<style>
+  :root {
+    --page: #0a0a0a; --card: #111111; --line: #1f1f1f; --line-2: #262626;
+    --ink: #ededed; --body: #a1a1a1; --mute: #7a7a7a;
+    --ok: #52a8ff; --ok-bg: #0d2440; --warn: #f5a623; --warn-bg: #33260d;
+    --sans: Geist, Inter, system-ui, -apple-system, sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: var(--ink); }
+  body { font: 400 15px/1.55 var(--sans); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; }
+  ::selection { background: #ededed; color: #0a0a0a; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 56px 20px 120px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 40px; }
+  h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.03em; margin: 0; }
+  .sub { color: var(--mute); font-size: 13px; }
+  .eyebrow { font: 400 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--mute); margin: 0 0 10px; display: flex; justify-content: space-between; }
+
+  /* Coming up: one quiet horizontal strip */
+  .strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 44px; scrollbar-width: none; }
+  .strip::-webkit-scrollbar { display: none; }
+  .chip { flex: none; max-width: 220px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--card);
+          transition: border-color .15s var(--ease), transform .15s var(--ease); cursor: default; }
+  .chip:hover { border-color: #3a3a3a; transform: translateY(-1px); }
+  .chip .t { font: 400 11px/16px var(--mono); color: var(--mute); }
+  .chip .n { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body); }
+  .chip.today .t { color: var(--ok); }
+
+  /* Needs you */
+  .list { list-style: none; margin: 0 0 44px; padding: 0; }
+  .item { position: relative; border-top: 1px solid var(--line); padding: 14px 0 14px 14px; cursor: pointer; outline: none;
+          transition: opacity .22s var(--ease), transform .22s var(--ease); }
+  .item::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 2px; border-radius: 2px; background: transparent; transition: background .15s; }
+  .item.sel::before { background: var(--ink); }
+  .item.gone { opacity: 0; transform: translateX(12px); }
+  .row { display: flex; gap: 12px; align-items: baseline; }
+  .who { font-weight: 500; color: var(--ink); white-space: nowrap; }
+  .subj { color: var(--body); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .when { font: 400 12px var(--mono); color: var(--mute); flex: none; }
+  .due { font: 400 11px/16px var(--mono); color: var(--warn); background: var(--warn-bg); padding: 1px 6px; border-radius: 9999px; flex: none; }
+  /* The calm part: detail stays folded until you hover or select. */
+  .more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s var(--ease), opacity .22s var(--ease); opacity: 0; }
+  .more > div { overflow: hidden; }
+  .item:hover .more, .item.sel .more { grid-template-rows: 1fr; opacity: 1; }
+  .sum { color: var(--body); font-size: 14px; padding-top: 6px; }
+  .body { color: var(--body); font-size: 14px; white-space: pre-wrap; padding-top: 10px; max-height: 50vh; overflow: auto; }
+  iframe.body.html { width: 100%; height: 50vh; border: 0; border-radius: 8px; background: #fff; margin-top: 10px; }
+  .acts { display: flex; gap: 14px; padding-top: 8px; font: 400 11px/16px var(--mono); color: var(--mute); }
+  .acts a, .acts button { color: var(--mute); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
+  .acts a:hover, .acts button:hover { color: var(--ink); }
+  .p { color: var(--ok); }
+  .empty { color: var(--mute); border-top: 1px solid var(--line); padding: 18px 0; font-size: 14px; }
+  .showmore { background: none; border: 0; color: var(--mute); font: 400 12px var(--mono); padding: 12px 0; cursor: pointer; }
+  .showmore:hover { color: var(--ink); }
+
+  /* Later: a single line until asked */
+  .later-head { cursor: pointer; }
+  .later-head:hover { color: var(--ink); }
+  .later { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s var(--ease); }
+  .later.open { grid-template-rows: 1fr; }
+  .later > ul { overflow: hidden; }
+  .later .item { padding-top: 10px; padding-bottom: 10px; }
+  .later .who { font-weight: 400; color: var(--body); }
+
+  footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 20px; background: linear-gradient(transparent, var(--page) 40%);
+           font: 400 11px var(--mono); color: var(--mute); text-align: center; }
+  kbd { font: inherit; color: var(--body); }
+  .err { color: #ff6166; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="greet">Inbox</h1>
+    <span class="sub" id="status"></span>
+  </header>
+
+  <p class="eyebrow"><span>Coming up</span><span id="upN"></span></p>
+  <div class="strip" id="strip"></div>
+
+  <p class="eyebrow"><span>Needs you</span><span id="actN"></span></p>
+  <ul class="list" id="act"></ul>
+
+  <p class="eyebrow later-head" id="laterHead"><span id="laterLabel">Everything else</span><span id="laterN"></span></p>
+  <div class="later" id="laterWrap"><ul class="list" id="later"></ul></div>
+</div>
+<footer>
+  <kbd>j</kbd> <kbd>k</kbd> move &nbsp; <kbd>o</kbd> read &nbsp; <kbd>enter</kbd> open &nbsp; <kbd>e</kbd> done &nbsp;
+  <kbd>2</kbd> coming up &nbsp; <kbd>3</kbd> later &nbsp; <span id="learn"></span>
+</footer>
+<script>
+const API = (p) => "api/" + p;
+const CAP = 3;                      // three at a time; more on request
+let DATA = null, sel = 0, showAll = false;
+const done = new Set(JSON.parse(localStorage.getItem("focus.done") || "[]"));
+const bodies = {};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => (s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])).replace(/[–—]/g, "-");
+
+function rel(ts) {
+  const d = (Date.now() / 1000 - ts);
+  if (d < 3600) return Math.max(1, Math.round(d / 60)) + "m";
+  if (d < 86400) return Math.round(d / 3600) + "h";
+  return Math.round(d / 86400) + "d";
+}
+function signal(id, action, lane) {
+  fetch(API("signal"), { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, action, lane }) }).catch(() => {});
+}
+function saveDone() { try { localStorage.setItem("focus.done", JSON.stringify([...done].slice(-2000))); } catch (e) {} }
+
+function actItems() {
+  const xs = DATA.lanes.act.filter(m => !done.has(m.id));
+  xs.sort((a, b) => (b.due ? 1 : 0) - (a.due ? 1 : 0) || b.ts - a.ts);
+  return xs;
+}
+function laterItems() { return DATA.lanes.later.filter(m => !done.has(m.id)); }
+
+function itemHtml(m, i, lane) {
+  const p = m.p == null ? "" : `<span class="p">model ${m.p.toFixed(2)}</span>`;
+  const b = bodies[m.id];
+  const body = !b ? "" : b.is_html
+    ? `<iframe class="body html" sandbox="" srcdoc="${esc(b.body)}"></iframe>`
+    : `<div class="body">${esc(b.body)}</div>`;
+  const flip = lane === "act" ? `<button data-a="later">not for me</button>` : `<button data-a="act">needs me</button>`;
+  return `<li class="item ${lane === "act" && i === sel ? "sel" : ""}" data-id="${esc(m.id)}" data-i="${i}" tabindex="-1">
+    <div class="row"><span class="who">${esc(m.who)}</span><span class="subj">${esc(m.subject)}</span>
+      ${m.due ? `<span class="due">${esc(m.due)}</span>` : ""}<span class="when">${m.ts ? rel(m.ts) : ""}</span></div>
+    <div class="more"><div>
+      <div class="sum">${esc(m.summary) || "&nbsp;"}</div>${body}
+      <div class="acts"><a href="${esc(m.url)}" target="_blank" rel="noopener">open</a>
+        <button data-a="done">done</button>${flip}
+        <span>${esc(m.why)}</span>${p}</div>
+    </div></div></li>`;
+}
+
+function render() {
+  const act = actItems(), shown = showAll ? act : act.slice(0, CAP);
+  sel = Math.min(sel, Math.max(0, shown.length - 1));
+  $("act").innerHTML = shown.length ? shown.map((m, i) => itemHtml(m, i, "act")).join("")
+      + (act.length > CAP && !showAll ? `<button class="showmore" id="more">${act.length - CAP} more</button>` : "")
+    : `<li class="empty">Nothing needs you right now.</li>`;
+  $("actN").textContent = act.length ? act.length : "";
+
+  // Coming up = calendar events in the next 7 days + event mail.
+  const now = Date.now() / 1000, week = now + 7 * 86400;
+  const evs = (DATA.events || []).filter(e => (e.start || 0) >= now - 3600 && (e.start || 0) <= week)
+    .map(e => ({ t: e.start, n: e.title || e.summary, today: new Date(e.start * 1000).toDateString() === new Date().toDateString() }));
+  const mail = DATA.lanes.upcoming.filter(m => !done.has(m.id)).slice(0, 8).map(m => ({ t: null, n: m.subject, id: m.id }));
+  const chips = evs.sort((a, b) => a.t - b.t).slice(0, 10).concat(mail);
+  $("strip").innerHTML = chips.map(c => `<div class="chip ${c.today ? "today" : ""}" title="${esc(c.n)}">
+    <div class="t">${c.t ? new Date(c.t * 1000).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) : "invite"}</div>
+    <div class="n">${esc(c.n)}</div></div>`).join("") || `<div class="chip"><div class="n">A clear week.</div></div>`;
+  $("upN").textContent = chips.length || "";
+
+  const later = laterItems();
+  $("laterN").textContent = later.length;
+  $("later").innerHTML = later.slice(0, 60).map((m, i) => itemHtml(m, i, "later")).join("");
+
+  const pv = DATA.preview;
+  $("learn").innerHTML = pv.anyjev_error ? `<span class="err">model: ${esc(pv.anyjev_error)}</span>`
+    : `learning from ${pv.signals} actions${pv.anyjev ? " · model preview on" : ""}`;
+}
+
+function currentAct() { return (showAll ? actItems() : actItems().slice(0, CAP))[sel]; }
+function animateOut(id, then) {
+  const li = document.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
+  if (!li) { then(); return; }
+  li.classList.add("gone"); setTimeout(then, 200);
+}
+function markDone(id) { signal(id, "done"); animateOut(id, () => { done.add(id); saveDone(); render(); }); }
+function move(id, lane) {
+  signal(id, "move", lane);
+  animateOut(id, () => {
+    for (const k of ["act", "upcoming", "later"]) {
+      const i = DATA.lanes[k].findIndex(m => m.id === id);
+      if (i >= 0) { const [m] = DATA.lanes[k].splice(i, 1); m.why = "you moved it"; DATA.lanes[lane].unshift(m); break; }
+    }
+    render();
+  });
+}
+async function readBody(m) {
+  if (bodies[m.id]) { delete bodies[m.id]; render(); return; }
+  signal(m.id, "open");
+  try {
+    const d = await (await fetch(API("message/" + encodeURIComponent(m.id)))).json();
+    bodies[m.id] = d.error ? { body: d.error } : { body: d.body || "(empty)", is_html: !!d.is_html };
+  } catch (e) { bodies[m.id] = { body: "Could not load the message." }; }
+  render();
+}
+
+// Hover dwell > 1.2s counts as "I looked at this" (a weak positive signal).
+let dwellT = null;
+document.addEventListener("mouseover", (e) => {
+  const li = e.target.closest(".item"); clearTimeout(dwellT);
+  if (li) dwellT = setTimeout(() => signal(li.dataset.id, "dwell"), 1200);
+});
+document.addEventListener("click", (e) => {
+  if (e.target.id === "more") { showAll = true; render(); return; }
+  if (e.target.closest("#laterHead")) { $("laterWrap").classList.toggle("open"); return; }
+  const li = e.target.closest(".item"); if (!li) return;
+  const a = e.target.dataset.a;
+  if (a === "done") return markDone(li.dataset.id);
+  if (a === "later") return move(li.dataset.id, "later");
+  if (a === "act") return move(li.dataset.id, "act");
+  if (e.target.tagName === "A") { signal(li.dataset.id, "open"); return; }
+  if (li.closest("#act")) { sel = +li.dataset.i; render(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const m = currentAct(), n = (showAll ? actItems() : actItems().slice(0, CAP)).length;
+  if (e.key === "j") { sel = Math.min(n - 1, sel + 1); render(); }
+  else if (e.key === "k") { sel = Math.max(0, sel - 1); render(); }
+  else if (!m) return;
+  else if (e.key === "e") markDone(m.id);
+  else if (e.key === "o") readBody(m);
+  else if (e.key === "Enter") { signal(m.id, "open"); window.open(m.url, "_blank", "noopener"); }
+  else if (e.key === "2") move(m.id, "upcoming");
+  else if (e.key === "3") move(m.id, "later");
+});
+
+async function load() {
+  try {
+    DATA = await (await fetch(API("triage"))).json();
+    const h = new Date().getHours();
+    $("greet").textContent = h < 12 ? "Morning." : h < 18 ? "Afternoon." : "Evening.";
+    $("status").textContent = DATA.meta.refreshing ? "syncing" : "";
+    render();
+  } catch (e) { $("status").innerHTML = `<span class="err">Could not reach the inbox service.</span>`; }
+}
+load(); setInterval(load, 60000);
+</script>
+</body>
+</html>

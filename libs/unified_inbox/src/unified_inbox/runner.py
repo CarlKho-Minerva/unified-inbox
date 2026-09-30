@@ -36,6 +36,7 @@ from unified_inbox.search import search_all
 from unified_inbox.sources import SOURCES
 from unified_inbox.store import Store
 from unified_inbox.telegram import download_telegram_media
+from unified_inbox.triage import LANES, Triage
 
 DATA_DIR = Path(os.environ.get("UNIFIED_INBOX_DATA_DIR", "runtime/unified-inbox"))
 PORT = int(os.environ.get("UNIFIED_INBOX_PORT", "8080"))
@@ -56,6 +57,7 @@ GRAPH_REBUILD_INTERVAL = int(os.environ.get("UNIFIED_INBOX_GRAPH_SECONDS", "1800
 ASSETS = Path(__file__).parent / "assets"
 app = Flask("unified_inbox", static_folder=None)
 store = Store(DATA_DIR)
+triage = Triage(DATA_DIR)
 
 _refresh_lock = threading.Lock()
 _state = {"refreshing": False}
@@ -126,6 +128,7 @@ def _do_refresh(full: bool = True) -> None:
         # Full cycle hits every source + aux; a fast tick only the FAST_SOURCES.
         refresh_all(store, due_sources=None if full else set(FAST_SOURCES), refresh_aux=full)
         _warm_details()
+        triage.score_new(store.get_messages())  # AnyJev preview; no-op unless configured
     finally:
         _state["refreshing"] = False
         _refresh_lock.release()
@@ -161,6 +164,32 @@ def _refresher_loop() -> None:
 @app.route("/")
 def index() -> Response:
     return Response((ASSETS / "app.html").read_text(), mimetype="text/html")
+
+
+@app.route("/focus")
+def focus() -> Response:
+    return Response((ASSETS / "focus.html").read_text(), mimetype="text/html")
+
+
+@app.route("/api/triage")
+def api_triage() -> Response:
+    meta = store.get_meta()
+    meta["refreshing"] = _state["refreshing"]
+    return jsonify({**triage.lanes(store.get_messages()), "events": store.get_events(), "meta": meta})
+
+
+@app.route("/api/signal", methods=["POST"])
+def api_signal() -> Response:
+    # Behaviour log: every open / hover-dwell / move / done is training data.
+    body = request.get_json(silent=True) or {}
+    mid, action, lane = body.get("id", ""), body.get("action", ""), body.get("lane")
+    if not mid or action not in ("open", "dwell", "move", "done", "reply", "snooze"):
+        return jsonify({"error": "id and a known action are required"}), 400
+    if lane is not None and lane not in LANES:
+        return jsonify({"error": f"lane must be one of {LANES}"}), 400
+    msg = next((m for m in store.get_messages() if m["id"] == mid), None)
+    triage.record(msg, mid, action, lane)
+    return jsonify({"ok": True})
 
 
 @app.route("/health")
