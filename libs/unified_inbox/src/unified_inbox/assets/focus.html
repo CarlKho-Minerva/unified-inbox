@@ -70,6 +70,13 @@
   .later .item { padding-top: 10px; padding-bottom: 10px; }
   .later .who { font-weight: 400; color: var(--body); }
 
+  .modes { display: inline-flex; gap: 2px; margin-left: 12px; padding: 2px; border: 1px solid var(--line-2); border-radius: 8px; }
+  .mode { background: none; border: 0; color: var(--mute); font: 400 12px var(--mono); padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: background .15s var(--ease), color .15s var(--ease); }
+  .mode.on { background: var(--card); color: var(--ink); }
+  .src { font: 400 11px var(--mono); color: var(--mute); flex: none; }
+  .lanedot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); flex: none; align-self: center; }
+  #allView { display: none; }
+  body.all #focusView { display: none; } body.all #allView { display: block; }
   footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 20px; background: linear-gradient(transparent, var(--page) 40%);
            font: 400 11px var(--mono); color: var(--mute); text-align: center; }
   kbd { font: inherit; color: var(--body); }
@@ -81,9 +88,10 @@
 <div class="wrap">
   <header>
     <h1 id="greet">Inbox</h1>
-    <span class="sub" id="status"></span>
+    <span class="sub"><span id="status"></span> <span class="modes"><button class="mode on" data-m="focus">Focus</button><button class="mode" data-m="all">All</button></span></span>
   </header>
 
+  <div id="focusView">
   <p class="eyebrow"><span>Coming up</span><span id="upN"></span></p>
   <div class="strip" id="strip"></div>
 
@@ -92,9 +100,15 @@
 
   <p class="eyebrow later-head" id="laterHead"><span id="laterLabel">Everything else</span><span id="laterN"></span></p>
   <div class="later" id="laterWrap"><ul class="list" id="later"></ul></div>
+  </div>
+  <div id="allView">
+    <p class="eyebrow"><span>Everything, newest first</span><span id="allN"></span></p>
+    <ul class="list" id="all"></ul>
+    <button class="showmore" id="allMore">show more</button>
+  </div>
 </div>
 <footer>
-  <kbd>j</kbd> <kbd>k</kbd> move &nbsp; <kbd>o</kbd> read &nbsp; <kbd>enter</kbd> open &nbsp; <kbd>e</kbd> done &nbsp;
+  <kbd>a</kbd> all/focus &nbsp; <kbd>j</kbd> <kbd>k</kbd> move &nbsp; <kbd>o</kbd> read &nbsp; <kbd>enter</kbd> open &nbsp; <kbd>e</kbd> done &nbsp;
   <kbd>2</kbd> coming up &nbsp; <kbd>3</kbd> later &nbsp; <span id="learn"></span>
 </footer>
 <script>
@@ -133,10 +147,10 @@ function itemHtml(m, i, lane) {
   const body = !b ? "" : b.is_html
     ? `<iframe class="body html" sandbox="" srcdoc="${esc(b.body)}"></iframe>`
     : `<div class="body">${esc(b.body)}</div>`;
-  const flip = lane === "act" ? `<button data-a="later">not for me</button>` : `<button data-a="act">needs me</button>`;
+  const flip = (lane === "act" || m._lane === "act") ? `<button data-a="later">not for me</button>` : `<button data-a="act">needs me</button>`;
   return `<li class="item ${lane === "act" && i === sel ? "sel" : ""}" data-id="${esc(m.id)}" data-i="${i}" tabindex="-1">
-    <div class="row"><span class="who">${esc(m.who)}</span><span class="subj">${esc(m.subject)}</span>
-      ${m.due ? `<span class="due">${esc(m.due)}</span>` : ""}<span class="when">${m.ts ? rel(m.ts) : ""}</span></div>
+    <div class="row">${lane === "all" && m._lane === "act" ? '<span class="lanedot" title="needs you"></span>' : ""}<span class="who">${esc(m.who)}</span><span class="subj">${esc(m.subject)}</span>
+      ${m.due ? `<span class="due">${esc(m.due)}</span>` : ""}${lane === "all" ? `<span class="src">${esc(m.source || "")}</span>` : ""}<span class="when">${m.ts ? rel(m.ts) : ""}</span></div>
     <div class="more"><div>
       <div class="sum">${esc(m.summary) || "&nbsp;"}</div>${body}
       <div class="acts"><a href="${esc(m.url)}" target="_blank" rel="noopener">open</a>
@@ -146,6 +160,10 @@ function itemHtml(m, i, lane) {
 }
 
 function render() {
+  if (mode === "all") { renderAll(); renderFooter(); return; }
+  renderFocus(); renderFooter();
+}
+function renderFocus() {
   const act = actItems(), shown = showAll ? act : act.slice(0, CAP);
   sel = Math.min(sel, Math.max(0, shown.length - 1));
   $("act").innerHTML = shown.length ? shown.map((m, i) => itemHtml(m, i, "act")).join("")
@@ -168,6 +186,8 @@ function render() {
   $("laterN").textContent = later.length;
   $("later").innerHTML = later.slice(0, 60).map((m, i) => itemHtml(m, i, "later")).join("");
 
+}
+function renderFooter() {
   const pv = DATA.preview;
   const broken = Object.entries((DATA.meta || {}).sources || {}).filter(([k, v]) => v && v.ok === false);
   $("learn").innerHTML = broken.length ? `<span class="err">${broken.map(([k, v]) => esc(k.replace("_", " ")) + ": " + esc(v.error)).join(" · ")}</span>`
@@ -175,7 +195,29 @@ function render() {
     : `learning from ${pv.signals} actions${pv.anyjev ? " · model preview on" : ""}`;
 }
 
-function currentAct() { return (showAll ? actItems() : actItems().slice(0, CAP))[sel]; }
+
+let mode = "focus", allLimit = 60;
+try { mode = localStorage.getItem("focus.mode") || "focus"; } catch (e) {}
+function allItems() {
+  const xs = [];
+  for (const k of ["act", "upcoming", "later"]) for (const m of DATA.lanes[k]) if (!done.has(m.id)) xs.push({ ...m, _lane: k });
+  return xs.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+function renderAll() {
+  const xs = allItems();
+  sel = Math.min(sel, Math.max(0, Math.min(allLimit, xs.length) - 1));
+  $("all").innerHTML = xs.slice(0, allLimit).map((m, i) => itemHtml(m, i, "all").replace('class="item ', `class="item ${i === sel ? "sel" : ""} `)).join("");
+  $("allN").textContent = xs.length;
+  $("allMore").style.display = xs.length > allLimit ? "" : "none";
+}
+function setMode(m) {
+  mode = m; sel = 0; try { localStorage.setItem("focus.mode", m); } catch (e) {}
+  document.body.classList.toggle("all", m === "all");
+  document.querySelectorAll(".mode").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  if (DATA) render();
+}
+function visibleList() { return mode === "all" ? allItems().slice(0, allLimit) : (showAll ? actItems() : actItems().slice(0, CAP)); }
+function currentAct() { return visibleList()[sel]; }
 function animateOut(id, then) {
   const li = document.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
   if (!li) { then(); return; }
@@ -210,6 +252,8 @@ document.addEventListener("mouseover", (e) => {
 });
 document.addEventListener("click", (e) => {
   if (e.target.id === "more") { showAll = true; render(); return; }
+  if (e.target.id === "allMore") { allLimit += 60; render(); return; }
+  if (e.target.classList.contains("mode")) { setMode(e.target.dataset.m); return; }
   if (e.target.closest("#laterHead")) { $("laterWrap").classList.toggle("open"); return; }
   const li = e.target.closest(".item"); if (!li) return;
   const a = e.target.dataset.a;
@@ -217,11 +261,12 @@ document.addEventListener("click", (e) => {
   if (a === "later") return move(li.dataset.id, "later");
   if (a === "act") return move(li.dataset.id, "act");
   if (e.target.tagName === "A") { signal(li.dataset.id, "open"); return; }
-  if (li.closest("#act")) { sel = +li.dataset.i; render(); }
+  if (li.closest("#act") || li.closest("#all")) { sel = +li.dataset.i; render(); }
 });
 document.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const m = currentAct(), n = (showAll ? actItems() : actItems().slice(0, CAP)).length;
+  if (e.key === "a") { setMode(mode === "all" ? "focus" : "all"); return; }
+  const m = currentAct(), n = visibleList().length;
   if (e.key === "j") { sel = Math.min(n - 1, sel + 1); render(); }
   else if (e.key === "k") { sel = Math.max(0, sel - 1); render(); }
   else if (!m) return;
@@ -241,7 +286,7 @@ async function load() {
     render();
   } catch (e) { $("status").innerHTML = `<span class="err">Could not reach the inbox service.</span>`; }
 }
-load(); setInterval(load, 60000);
+setMode(mode); load(); setInterval(load, 60000);
 </script>
 </body>
 </html>
