@@ -314,6 +314,58 @@
   .palette .opt .hint { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #e2e2e2; border-radius: 6px; border: 3px solid #fff; }
+
+/* ---------- Calm layer (2026-09-29): the reference compose card, quieter ----------
+   One ink accent, soft grey page, white cards, hover-to-reveal detail, 180ms ease-out. */
+:root {
+  --bg: #f4f4f3; --bg-soft: #efefee; --bg-list: #f4f4f3; --ink: #1a1a1a; --ink-2: #5f6064; --ink-3: #9a9ba0;
+  --line: #e6e6e4; --line-2: #dededc; --accent: #1a1a1a; --accent-soft: #ececea; --sel: #ffffff; --unread: #1a1a1a;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}
+body { font-size: 14px; letter-spacing: -0.01em; background: var(--bg); }
+.topbar { background: var(--bg); border-bottom: 0; height: 60px; }
+.wm-dots { display: none; }
+.wordmark { font-weight: 600; }
+.seg { transition: background .18s var(--ease), color .18s var(--ease); }
+.search { background: #fff; border-color: transparent; box-shadow: 0 0 0 1px #0000000d; }
+.pills { background: var(--bg); border-bottom: 0; padding: 4px 16px 12px; }
+.pill { background: #fff; border-color: transparent; box-shadow: 0 0 0 1px #0000000d; transition: background .18s var(--ease), color .18s var(--ease); }
+.pill.on { background: var(--ink); color: #fff; box-shadow: none; }
+.pill .dot { width: 6px; height: 6px; opacity: .7; }
+.pill.needs { font-weight: 500; }
+.main { gap: 12px; padding: 0 12px 12px; height: calc(100vh - 60px - 47px - 47px); }
+.list { background: #fff; border: 0; border-radius: 16px; box-shadow: 0 0 0 1px #0000000a, 0 1px 2px #00000008; }
+.reader { background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px #0000000a, 0 1px 2px #00000008; }
+.row { grid-template-columns: 3px 1fr auto; padding: 13px 16px 13px 0; border-bottom: 1px solid #f0f0ee; transition: background .18s var(--ease); }
+.row:hover { background: #fafaf9; }
+.row.sel { background: #f6f6f5; }
+.row.sel .bar { background: var(--ink); }
+.srcdot { width: 6px; height: 6px; opacity: .6; }
+.tag { background: none !important; color: var(--ink-3) !important; padding: 0; font-size: 10.5px; }
+.who { font-weight: 500; }
+.row.read .who { font-weight: 400; }
+.subj { font-weight: 400; color: var(--ink-2); }
+.row:not(.read) .subj { color: var(--ink); }
+/* the calm part: snippet folded until hover or selection */
+.snip { max-height: 0; opacity: 0; margin-top: 0; transition: max-height .2s var(--ease), opacity .2s var(--ease), margin .2s var(--ease); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.row:hover .snip, .row.sel .snip { max-height: 40px; opacity: 1; margin-top: 4px; }
+.udot { width: 6px; height: 6px; }
+.needsdot { width: 6px; height: 6px; border-radius: 50%; background: #d97a1f; flex: none; }
+.why { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 6px; display: flex; gap: 12px; max-height: 0; overflow: hidden; opacity: 0; transition: max-height .2s var(--ease), opacity .2s var(--ease); }
+.row.sel .why { max-height: 20px; opacity: 1; }
+.why button { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-3); cursor: pointer; }
+.why button:hover { color: var(--ink); }
+.reader > * { animation: calmIn .22s var(--ease); }
+@keyframes calmIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.rd-head { padding: 30px 36px 18px; border-bottom: 0; }
+.rd-subj { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; }
+.rd-av { width: 32px; height: 32px; font-size: 12px; }
+.rd-plain, .thread { padding: 8px 36px 30px; color: #3a3b3f; line-height: 1.65; }
+.icon-btn { border-radius: 10px; }
+.shortcuts { background: var(--bg); border-top: 0; }
+.ask-fab { background: #fff; color: var(--ink); box-shadow: 0 0 0 1px #0000001a, 0 6px 20px #0000000f; }
+.chat-b.user, .chat-send { background: var(--ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body tabindex="-1">
@@ -353,7 +405,9 @@
     <span class="sc"><kbd>j</kbd><kbd>k</kbd><kbd>↑</kbd><kbd>↓</kbd> <b>move & preview</b></span>
     <span class="sc"><kbd>enter</kbd> <b>mark read</b></span>
     <span class="sc"><kbd>u</kbd> <b>unread only</b></span>
-    <span class="sc"><kbd>e</kbd> <b>mark read</b></span>
+    <span class="sc"><kbd>e</kbd> <b>done</b></span>
+    <span class="sc"><kbd>x</kbd> <b>not for me</b></span>
+    <span class="sc"><kbd>n</kbd> <b>needs me</b></span>
     <span class="sc"><kbd>/</kbd> <b>search</b></span>
     <span class="sc"><kbd>r</kbd> <b>refresh</b></span>
     <span class="sc"><kbd>⌘K</kbd> <b>commands</b></span>
@@ -389,7 +443,7 @@
 <script>
 const API = (p) => "api/" + p;   // relative -> works behind /service/unified-inbox/
 let SOURCES = {}, MSGS = [], META = {};
-let filterSrc = "all", unreadOnly = false, query = "", sel = 0;
+let filterSrc = "needs", unreadOnly = false, query = "", sel = 0;
 let DEEP = [], deepQuery = "", deepLoading = false;   // deep full-history search results
 let mode = "mail";        // "mail" | "messages" | "calendar" | "luma" | "tasks"
 let EVENTS = [], evSel = 0;
@@ -398,6 +452,7 @@ let LUMA = [], lumaSel = 0;
 let TASKS = [], taskSel = 0;
 let CHAT = [];  // {role, content} turns in the Ask panel
 let readState = {};  // client-side read marking
+let LANE = {}, WHY = {}, PREVIEW = null;  // triage lane per message id (from /api/triage)
 const detailCache = {};  // id -> fetched detail (prefetched for instant reads)
 const CHAT_TTL = 45000;  // chat threads change; re-fetch cached ones after this
 
@@ -426,6 +481,7 @@ const _loaded = { events: false, luma: false, tasks: false };
 async function refreshData() {
   const data = await (await fetch(API("messages"))).json();
   MSGS = data.messages; META = data.meta;
+  await loadTriage();
   renderPills(); render(); updateStatus();       // paint the inbox immediately
   // Refresh secondary data only if it was already loaded this session; a tab
   // never visited stays unfetched until opened (keeps first load light).
@@ -433,6 +489,20 @@ async function refreshData() {
   if (_loaded.luma) loadLuma();
   if (_loaded.tasks) loadTasks();
 }
+async function loadTriage() {
+  try {
+    const t = await (await fetch(API("triage"))).json();
+    LANE = {}; WHY = {};
+    for (const [lane, xs] of Object.entries(t.lanes)) for (const m of xs) { LANE[m.id] = lane; WHY[m.id] = m.why; }
+    PREVIEW = t.preview;
+  } catch (e) { /* triage is additive; the inbox still works without it */ }
+}
+// Every choice is a training signal (open, dwell, done, move). See triage.py.
+function signal(id, action, lane) {
+  fetch(API("signal"), { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, action, lane }) }).catch(() => {});
+}
+function moveLane(id, lane) { LANE[id] = lane; WHY[id] = "you moved it"; signal(id, "move", lane); render(); renderPills(); }
 async function loadEvents() {
   _loaded.events = true;
   try { EVENTS = (await (await fetch(API("events"))).json()).events || []; } catch(e) { EVENTS = []; }
@@ -477,7 +547,9 @@ function renderPills() {
   const scopedSrcs = Object.entries(SOURCES).filter(([k]) => inScope(k));
   const total = scopedSrcs.reduce((a,[k]) => a + (c[k]||0), 0);
   const allLabel = mode === "messages" ? "All messages" : "All mail";
-  let html = `<div class="pill ${filterSrc==='all'?'on':''}" data-src="all">${allLabel} ${total?`<span class="n">${total}</span>`:''}</div>`;
+  const needsN = MSGS.filter(m => inScope(m.source) && LANE[m.id] === "act" && !isRead(m) && (m.ts || 0) >= Date.now() / 1000 - 21 * 86400).length;
+  let html = `<div class="pill needs ${filterSrc==='needs'?'on':''}" data-src="needs">Needs you ${needsN?`<span class="n">${needsN}</span>`:''}</div>`;
+  html += `<div class="pill ${filterSrc==='all'?'on':''}" data-src="all">${allLabel} ${total?`<span class="n">${total}</span>`:''}</div>`;
   html += `<div class="pill ${unreadOnly?'on':''}" data-toggle="unread">Unread</div>`;
   html += `<div class="pill sep">|</div>`;
   for (const [k,s] of scopedSrcs) {
@@ -529,14 +601,15 @@ function messageScore(m, q) {
 // the chat sources (Slack/Discord/Telegram).
 function inScope(source){
   const g = (SOURCES[source]||{}).group;
-  if (mode === "messages") return g === "Chat";
-  return g === "Email" || g === "Dev";   // mail tab
+  if (mode === "messages") return g === "Chat" || g === "Dev";  // chat + GitHub
+  return g === "Email";   // mail tab = email accounts only
 }
 function visible() {
   const q = query.trim();
   let items = MSGS.filter(m => {
     if (!inScope(m.source)) return false;
-    if (filterSrc !== "all" && m.source !== filterSrc) return false;
+    if (filterSrc === "needs") { if (LANE[m.id] !== "act" || (m.ts || 0) < Date.now() / 1000 - 21 * 86400) return false; }
+    else if (filterSrc !== "all" && m.source !== filterSrc) return false;
     if (unreadOnly && isRead(m)) return false;
     return true;
   });
@@ -581,13 +654,13 @@ function renderInbox() {
       <div class="bar"></div>
       <div class="c">
         <div class="top">
-          <span class="srcdot" style="background:${s.color}"></span>
-          <span class="who">${esc(m.who)}</span>
+          ${LANE[m.id]==="act"?'<span class="needsdot" title="needs you"></span>':`<span class="srcdot" style="background:${s.color}"></span>`}<span class="who">${esc(m.who)}</span>
           <span class="tag" style="color:${s.color};background:${s.color}18">${s.short}</span>
           ${m.open_external?'<span class="ext-tag">opens in Slack</span>':''}
         </div>
         <div class="subj">${esc(m.subject)}</div>
         <div class="snip">${esc(m.snippet)}</div>
+        <div class="why">${LANE[m.id]==="act"?`<button data-mv="later">not for me</button>`:`<button data-mv="act">needs me</button>`}<span>${esc(WHY[m.id]||"")}</span></div>
       </div>
       <div class="meta"><span class="time mono">${relTime(m.ts)}</span><span class="udot"></span></div>
     </div>`;
@@ -597,12 +670,16 @@ function renderInbox() {
   if (q && deepQuery !== q) {
     footer = deepLoading
       ? `<div class="deep-btn loading-inline">Searching all mail &amp; Slack…</div>`
-      : `<div class="deep-btn" id="deepBtn">🔍 Search all mail &amp; Slack for “${esc(q)}”</div>`;
+      : `<div class="deep-btn" id="deepBtn">Search all mail &amp; Slack for “${esc(q)}”</div>`;
   }
   el("list").innerHTML = (items.length ? rows : `<div class="loading">No cached conversations match.</div>`) + footer;
   el("list").querySelectorAll(".row").forEach(r=>{
-    r.onclick=()=>{sel=+r.dataset.i;open();};
-    r.onmouseenter=()=>{ const m=visible()[+r.dataset.i]; if(m && !m.open_external) getDetail(m); };
+    r.onclick=(ev)=>{ const mv=ev.target.dataset && ev.target.dataset.mv; const m=visible()[+r.dataset.i];
+      if (mv && m) { ev.stopPropagation(); moveLane(m.id, mv); return; }
+      sel=+r.dataset.i; open(); };
+    r.onmouseenter=()=>{ const m=visible()[+r.dataset.i]; if(m && !m.open_external) getDetail(m);
+      clearTimeout(r._dw); r._dw=setTimeout(()=>{ if(m) signal(m.id,"dwell"); }, 1200); };
+    r.onmouseleave=()=>clearTimeout(r._dw);
   });
   const db = el("deepBtn"); if (db) db.onclick = runDeepSearch;
   const selRow = el("list").querySelector(".row.sel");
@@ -657,7 +734,7 @@ async function open(markRead = true) {
   const m = items[sel];
   if (!m) return;
   if (m.open_external) { window.open(m.url, "_blank", "noopener"); return; }  // Slack deep result
-  if (markRead && !readState[m.id]) { readState[m.id] = true; renderPills(); }
+  if (markRead && !readState[m.id]) { readState[m.id] = true; renderPills(); signal(m.id, "open"); }
   render();
   const cached = detailCache[m.id];
   const haveNow = cached && !cached._promise;
@@ -757,7 +834,7 @@ function evTime(e){
 // The same event subscribed in multiple calendars collapses to one, remembering
 // every calendar it came from (shown as "also in ...").
 function calAllEvents(){
-  // Only overlay Luma events the user has a relationship with (going/pending/invited)
+  // Only overlay Luma events Carl has a relationship with (going/pending/invited)
   // -- NOT the whole public discover feed, which would flood the calendar.
   const luma = LUMA.filter(e => e.status && e.status !== "discover")
     .map(e => ({title:e.name, start:e.start, end:e.end||e.start+3600, all_day:false, color:"#e0533d", url:e.url, calendar:`Luma · ${e.status}`, location:e.location, luma:e}));
@@ -954,7 +1031,7 @@ function renderLuma(){
   const items = upcomingLuma();
   if (lumaSel >= items.length) lumaSel = Math.max(0, items.length-1);
   const list = el("list");
-  // Filter pills with counts, so the user can flip between what he's going to / pending / invited / discover.
+  // Filter pills with counts, so Carl can flip between what he's going to / pending / invited / discover.
   const counts = {}; LUMA.forEach(e => { const s=e.status||"discover"; counts[s]=(counts[s]||0)+1; });
   const pill = (k,label) => `<button class="luma-pill ${lumaFilter===k?'on':''}" data-lf="${k}">${label}${k!=="all"&&counts[k]?` <span class="n">${counts[k]}</span>`:""}</button>`;
   let pills = `<div class="luma-pills">${pill("all","All")}${["going","pending","invited","discover"].map(k=>pill(k,LUMA_STATUS[k].label)).join("")}</div>`;
@@ -1136,7 +1213,7 @@ function layoutAndDrawGraph(){
 /* ---------- Floating Ask agent ---------- */
 const CHAT_SUGGESTIONS = [
   "What are my top priorities today?",
-  "Summarize my unread email.",
+  "Summarize my unread Minerva email.",
   "Any GitHub PRs waiting on my review?",
   "What should I not miss this week?",
 ];
@@ -1252,7 +1329,9 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/") { e.preventDefault(); el("search").focus(); }
   else if (e.key === "u") { unreadOnly=!unreadOnly; sel=0; render(); renderPills(); }
   else if (e.key === "r") { doRefresh(); }
-  else if (e.key === "e") { const m=visible()[sel]; if(m){readState[m.id]=true; render(); renderPills();} }
+  else if (e.key === "e") { const m=visible()[sel]; if(m){readState[m.id]=true; signal(m.id,"done"); render(); renderPills();} }
+  else if (e.key === "x") { const m=visible()[sel]; if(m) moveLane(m.id, "later"); }
+  else if (e.key === "n") { const m=visible()[sel]; if(m) moveLane(m.id, "act"); }
   else if (e.key === "Escape") { filterSrc="all"; unreadOnly=false; query=""; el("search").value=""; sel=0; render(); renderPills(); }
 }, true);
 el("search").addEventListener("input", (e)=>{ query=e.target.value; sel=0; evSel=0; lumaSel=0; taskSel=0; if (query.trim()!==deepQuery){ DEEP=[]; deepQuery=""; } render(); });

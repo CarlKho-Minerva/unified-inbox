@@ -87,8 +87,15 @@ def summarize(m: dict) -> str:
     return (cut[:140] + "...") if len(cut) > 140 else cut
 
 
+# Carl's own addresses: mail from himself (forwards, notes-to-self, agent reports) never "needs him".
+_SELF = frozenset({"carl@somach.life", "kho@uni.minerva.edu", "carlkho.cvk@gmail.com", "carlcrafters@gmail.com",
+                   "carl@themildlyusefulcompany.com"})
+
+
 def rule_lane(m: dict) -> tuple[str, str]:
     """(lane, reason) from rules alone."""
+    if (m.get("addr") or "").lower() in _SELF:
+        return "later", "from you"
     text = f"{m.get('subject', '')} {m.get('snippet', '')}"
     sender = f"{m.get('who', '')} {m.get('addr', '')}"
     kind = m.get("kind")

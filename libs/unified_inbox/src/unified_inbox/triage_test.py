@@ -71,3 +71,7 @@ def test_anyjev_preview_is_off_without_env(tmp_path: Path) -> None:
     t.score_new([_email("A B", "a@b.c", "x")])
     preview = t.lanes([])["preview"]
     assert preview["anyjev"] is False and preview["anyjev_error"] is None
+
+
+def test_mail_from_carl_himself_is_later() -> None:
+    assert rule_lane(_email("Carl Vincent Kho", "carl@somach.life", "Fwd: Order #41378 confirmed")) == ("later", "from you")
