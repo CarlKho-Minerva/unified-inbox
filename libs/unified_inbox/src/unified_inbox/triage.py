@@ -179,6 +179,11 @@ class Triage:
             self.dir.mkdir(parents=True, exist_ok=True)
             with self.signals_path.open("a") as f:
                 f.write(json.dumps(row) + "\n")
+            if action == "done":
+                # Done = handled: it leaves Needs you for good (still visible under All mail).
+                ov = self.overrides()
+                ov[mid] = "done"
+                self._write(self.overrides_path, ov)
             if action == "move" and lane in LANES:
                 ov = self.overrides()
                 ov[mid] = lane
@@ -250,6 +255,8 @@ class Triage:
             sender_lane = senders.get((m.get("addr") or "").lower())
             if sender_lane and why != "asks for an action":
                 lane, why = sender_lane, "you moved this sender"
+            if ov.get(m["id"]) == "done":
+                continue
             if m["id"] in ov:
                 lane, why = ov[m["id"]], "you moved it"
             out[lane].append({

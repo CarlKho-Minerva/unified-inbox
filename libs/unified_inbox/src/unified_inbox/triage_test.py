@@ -75,3 +75,10 @@ def test_anyjev_preview_is_off_without_env(tmp_path: Path) -> None:
 
 def test_mail_from_carl_himself_is_later() -> None:
     assert rule_lane(_email("Carl Vincent Kho", "carl@somach.life", "Fwd: Order #41378 confirmed")) == ("later", "from you")
+
+
+def test_done_leaves_every_lane(tmp_path: Path) -> None:
+    t = Triage(tmp_path)
+    m = _email("Josh Albrecht", "josh@imbue.com", "Re: thanks", mid="g:9")
+    t.record(m, "g:9", "done")
+    assert all(not xs for xs in t.lanes([m])["lanes"].values())
